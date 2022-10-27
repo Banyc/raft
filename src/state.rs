@@ -104,7 +104,8 @@ impl State {
         }
     }
 
-    pub fn request_vote(self, from: Node, term: Term, timeout: Instant) -> (State, bool) {
+    /// - Client code should spawn a new election timer expiring at `timeout` when `spawn_election_timer` is true.
+    pub fn request_vote(self, from: Node, term: Term, timeout: Instant) -> (State, RequestVoteRes) {
         if self.term() < term {
             // follow the new term
             let follower = Follower {
@@ -115,12 +116,24 @@ impl State {
             };
 
             // vote for the candidate
-            return (State::Follower(follower), true);
+            return (
+                State::Follower(follower),
+                RequestVoteRes {
+                    vote_granted: true,
+                    spawn_election_timer: true,
+                },
+            );
         }
 
         if self.term() > term {
             // reject the request
-            return (self, false);
+            return (
+                self,
+                RequestVoteRes {
+                    vote_granted: false,
+                    spawn_election_timer: false,
+                },
+            );
         }
 
         match self {
@@ -129,30 +142,61 @@ impl State {
                     Some(votes_for) => {
                         if votes_for == from {
                             // vote for the candidate
-                            (State::Follower(follower), true)
+                            (
+                                State::Follower(follower),
+                                RequestVoteRes {
+                                    vote_granted: true,
+                                    spawn_election_timer: false,
+                                },
+                            )
                         } else {
                             // reject the request
-                            (State::Follower(follower), false)
+                            (
+                                State::Follower(follower),
+                                RequestVoteRes {
+                                    vote_granted: false,
+                                    spawn_election_timer: false,
+                                },
+                            )
                         }
                     }
                     None => {
                         // vote for the candidate
-                        (State::Follower(follower), true)
+                        (
+                            State::Follower(follower),
+                            RequestVoteRes {
+                                vote_granted: true,
+                                spawn_election_timer: false,
+                            },
+                        )
                     }
                 }
             }
-            State::Candidate(candidate) => (State::Candidate(candidate), false),
-            State::Leader(leader) => (State::Leader(leader), false),
+            State::Candidate(candidate) => (
+                State::Candidate(candidate),
+                RequestVoteRes {
+                    vote_granted: false,
+                    spawn_election_timer: false,
+                },
+            ),
+            State::Leader(leader) => (
+                State::Leader(leader),
+                RequestVoteRes {
+                    vote_granted: false,
+                    spawn_election_timer: false,
+                },
+            ),
         }
     }
 
+    /// - Client code should spawn a new election timer expiring at `timeout` when this method returns true.
     pub fn respond_vote(
         self,
         from: Node,
         term: Term,
         vote_granted: bool,
         timeout: Instant,
-    ) -> State {
+    ) -> (State, bool) {
         if self.term() < term {
             // follow the new term
             let follower = Follower {
@@ -162,16 +206,16 @@ impl State {
                 votes_for: None,
             };
 
-            return State::Follower(follower);
+            return (State::Follower(follower), true);
         }
 
         if self.term() > term {
             // ignore the response
-            return self;
+            return (self, false);
         }
 
         match self {
-            State::Follower(follower) => State::Follower(follower),
+            State::Follower(follower) => (State::Follower(follower), false),
             State::Candidate(candidate) => {
                 if vote_granted {
                     let mut votes_from = candidate.votes_from;
@@ -184,21 +228,24 @@ impl State {
                             term: candidate.term,
                         };
 
-                        return State::Leader(leader);
+                        return (State::Leader(leader), false);
                     }
 
-                    State::Candidate(Candidate {
-                        facts: candidate.facts,
-                        term: candidate.term,
-                        election_timeout: candidate.election_timeout,
-                        votes_from,
-                        emit_timeout: candidate.emit_timeout,
-                    })
+                    (
+                        State::Candidate(Candidate {
+                            facts: candidate.facts,
+                            term: candidate.term,
+                            election_timeout: candidate.election_timeout,
+                            votes_from,
+                            emit_timeout: candidate.emit_timeout,
+                        }),
+                        false,
+                    )
                 } else {
-                    State::Candidate(candidate)
+                    (State::Candidate(candidate), false)
                 }
             }
-            State::Leader(leader) => State::Leader(leader),
+            State::Leader(leader) => (State::Leader(leader), false),
         }
     }
 }
@@ -227,4 +274,9 @@ pub struct Leader {
 pub struct Facts {
     pub id: Node,
     pub nodes: usize,
+}
+
+pub struct RequestVoteRes {
+    pub vote_granted: bool,
+    pub spawn_election_timer: bool,
 }
