@@ -4,3 +4,7 @@ pub mod state;
 pub struct Node(pub u64);
 
 pub type Term = u64;
+
+pub enum Msg {
+    RequestVote { term: Term, from: Node },
+}
