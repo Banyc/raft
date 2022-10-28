@@ -22,7 +22,7 @@ impl State {
     /// - Client code should spawn a new emit timer expiring at `timeout` when some message is returned.
     /// - Client code should call this method when the emit timer expires.
     /// - Client code should call this method after state transitions.
-    pub fn emit(&mut self, now: Instant, timeout: Instant) -> Option<Msg> {
+    pub fn emit(&mut self, now: Instant, timeout: Instant) -> Option<BroadcastMsg> {
         match self {
             State::Follower(_) => None,
             State::Candidate(candidate) => {
@@ -32,13 +32,22 @@ impl State {
 
                 candidate.emission_timeout = timeout;
 
-                let msg = Msg::RequestVote {
+                let msg = BroadcastMsg::RequestVote {
                     term: candidate.term,
                     from: candidate.facts.id,
                 };
                 Some(msg)
             }
-            State::Leader(_) => None,
+            State::Leader(leader) => {
+                if now < leader.emission_timeout {
+                    return None;
+                }
+
+                leader.emission_timeout = timeout;
+
+                let msg = BroadcastMsg::Ping { term: leader.term };
+                Some(msg)
+            }
         }
     }
 
@@ -176,6 +185,7 @@ impl State {
         from: Node,
         term: Term,
         vote_granted: bool,
+        now: Instant,
         timeout: Instant,
     ) -> bool {
         if self.try_upgrade_term(term, timeout, None) {
@@ -202,6 +212,7 @@ impl State {
                         let leader = Leader {
                             facts: candidate.facts,
                             term: candidate.term,
+                            emission_timeout: now,
                         };
 
                         *self = State::Leader(leader);
@@ -324,6 +335,7 @@ pub struct Candidate {
 pub struct Leader {
     facts: Facts,
     term: Term,
+    emission_timeout: Instant,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -337,8 +349,9 @@ pub struct RequestVoteRes {
     pub spawn_election_timer: bool,
 }
 
-pub enum Msg {
+pub enum BroadcastMsg {
     RequestVote { term: Term, from: Node },
+    Ping { term: Term },
 }
 
 pub enum PingError {
