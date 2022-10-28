@@ -359,10 +359,141 @@ pub enum BroadcastMsg {
     Ping { term: Term },
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum PingError {
     MultiLeaders,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum PongError {
     NotLeader,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_full_election() {
+        let now = Instant::now();
+        let mut s1 = State::new(
+            Facts {
+                id: Node(1),
+                nodes: 3,
+            },
+            now,
+        );
+        let mut s2 = State::new(
+            Facts {
+                id: Node(2),
+                nodes: 3,
+            },
+            now,
+        );
+        let mut s3 = State::new(
+            Facts {
+                id: Node(3),
+                nodes: 3,
+            },
+            now,
+        );
+
+        assert!(s1.elect(now, now));
+        match s1 {
+            State::Follower(_) => panic!(),
+            State::Candidate(_) => {}
+            State::Leader(_) => panic!(),
+        }
+
+        assert!(s2.elect(now, now));
+        match s2 {
+            State::Follower(_) => panic!(),
+            State::Candidate(_) => {}
+            State::Leader(_) => panic!(),
+        }
+
+        let msg = s1.emit(now, now).unwrap();
+        match msg {
+            BroadcastMsg::RequestVote { term, from } => {
+                assert_eq!(term, 1);
+                assert_eq!(from, Node(1));
+            }
+            BroadcastMsg::Ping { .. } => panic!(),
+        }
+
+        let resp = s2.request_vote(Node(1), 1, now);
+        assert_eq!(resp.vote_granted, false);
+        assert_eq!(resp.spawn_election_timer, false);
+
+        assert!(!s1.respond_vote(Node(2), s2.term(), resp.vote_granted, now, now));
+        match s1 {
+            State::Follower(_) => panic!(),
+            State::Candidate(_) => {}
+            State::Leader(_) => panic!(),
+        }
+
+        let resp = s3.request_vote(Node(1), 1, now);
+        assert_eq!(resp.vote_granted, true);
+        assert_eq!(resp.spawn_election_timer, true);
+        assert_eq!(s3.term(), 1);
+
+        assert!(!s1.respond_vote(Node(3), s3.term(), resp.vote_granted, now, now));
+        match s1 {
+            State::Follower(_) => panic!(),
+            State::Candidate(_) => panic!(),
+            State::Leader(_) => {}
+        }
+
+        let msg = s2.emit(now, now).unwrap();
+        match msg {
+            BroadcastMsg::RequestVote { term, from } => {
+                assert_eq!(term, 1);
+                assert_eq!(from, Node(2));
+            }
+            BroadcastMsg::Ping { .. } => panic!(),
+        }
+
+        let resp = s1.request_vote(Node(2), 1, now);
+        assert_eq!(resp.vote_granted, false);
+        assert_eq!(resp.spawn_election_timer, false);
+
+        assert!(!s2.respond_vote(Node(1), s1.term(), resp.vote_granted, now, now));
+        match s2 {
+            State::Follower(_) => panic!(),
+            State::Candidate(_) => {}
+            State::Leader(_) => panic!(),
+        }
+
+        let resp = s3.request_vote(Node(2), 1, now);
+        assert_eq!(resp.vote_granted, false);
+        assert_eq!(resp.spawn_election_timer, false);
+
+        assert!(!s2.respond_vote(Node(3), s3.term(), resp.vote_granted, now, now));
+        match s2 {
+            State::Follower(_) => panic!(),
+            State::Candidate(_) => {}
+            State::Leader(_) => panic!(),
+        }
+
+        assert!(s3.emit(now, now).is_none());
+
+        let msg = s1.emit(now, now).unwrap();
+        match msg {
+            BroadcastMsg::RequestVote { .. } => panic!(),
+            BroadcastMsg::Ping { term } => assert_eq!(term, 1),
+        }
+
+        assert!(s2.ping(s1.term(), now).unwrap());
+        match s2 {
+            State::Follower(_) => {}
+            State::Candidate(_) => panic!(),
+            State::Leader(_) => panic!(),
+        }
+
+        assert!(!s1.pong(s2.term(), now).unwrap());
+
+        assert!(s3.ping(s1.term(), now).unwrap());
+
+        assert!(!s1.pong(s3.term(), now).unwrap());
+    }
 }
