@@ -105,26 +105,21 @@ impl State {
     }
 
     /// - Client code should spawn a new election timer expiring at `timeout` when `spawn_election_timer` is true.
-    pub fn request_vote(self, from: Node, term: Term, timeout: Instant) -> (State, RequestVoteRes) {
-        if self.try_upgrade_term(term, timeout) {
-            return (
-                self,
-                RequestVoteRes {
-                    vote_granted: true,
-                    spawn_election_timer: true,
-                },
-            );
+    pub fn request_vote(&mut self, from: Node, term: Term, timeout: Instant) -> RequestVoteRes {
+        if self.try_upgrade_term(term, timeout, Some(from)) {
+            // vote for the candidate
+            return RequestVoteRes {
+                vote_granted: true,
+                spawn_election_timer: true,
+            };
         }
 
         if self.term() > term {
             // reject the request
-            return (
-                self,
-                RequestVoteRes {
-                    vote_granted: false,
-                    spawn_election_timer: false,
-                },
-            );
+            return RequestVoteRes {
+                vote_granted: false,
+                spawn_election_timer: false,
+            };
         }
 
         match self {
@@ -133,168 +128,173 @@ impl State {
                     Some(votes_for) => {
                         if votes_for == from {
                             // vote for the candidate
-                            (
-                                State::Follower(follower),
-                                RequestVoteRes {
-                                    vote_granted: true,
-                                    spawn_election_timer: false,
-                                },
-                            )
+                            RequestVoteRes {
+                                vote_granted: true,
+                                spawn_election_timer: false,
+                            }
                         } else {
                             // reject the request
-                            (
-                                State::Follower(follower),
-                                RequestVoteRes {
-                                    vote_granted: false,
-                                    spawn_election_timer: false,
-                                },
-                            )
+                            RequestVoteRes {
+                                vote_granted: false,
+                                spawn_election_timer: false,
+                            }
                         }
                     }
                     None => {
                         // vote for the candidate
-                        (
-                            State::Follower(follower),
-                            RequestVoteRes {
-                                vote_granted: true,
-                                spawn_election_timer: false,
-                            },
-                        )
+                        follower.votes_for = Some(from);
+
+                        RequestVoteRes {
+                            vote_granted: true,
+                            spawn_election_timer: false,
+                        }
                     }
                 }
             }
-            State::Candidate(candidate) => (
-                State::Candidate(candidate),
+            State::Candidate(_) =>
+            // already voted for themselves
+            {
                 RequestVoteRes {
                     vote_granted: false,
                     spawn_election_timer: false,
-                },
-            ),
-            State::Leader(leader) => (
-                State::Leader(leader),
+                }
+            }
+            State::Leader(_) =>
+            // already voted for themselves
+            {
                 RequestVoteRes {
                     vote_granted: false,
                     spawn_election_timer: false,
-                },
-            ),
+                }
+            }
         }
     }
 
     /// - Client code should spawn a new election timer expiring at `timeout` when this method returns true.
     pub fn respond_vote(
-        self,
+        &mut self,
         from: Node,
         term: Term,
         vote_granted: bool,
         timeout: Instant,
-    ) -> (State, bool) {
-        if self.try_upgrade_term(term, timeout) {
-            return (self, true);
+    ) -> bool {
+        if self.try_upgrade_term(term, timeout, None) {
+            return true;
         }
 
         if self.term() > term {
             // ignore the response
-            return (self, false);
+            return false;
         }
 
         match self {
-            State::Follower(follower) => (State::Follower(follower), false),
+            State::Follower(_) => {
+                // ignore the response
+            }
             State::Candidate(candidate) => {
                 if vote_granted {
-                    let mut votes_from = candidate.votes_from;
-                    votes_from.insert(from);
+                    // add up the vote
+                    candidate.votes_from.insert(from);
 
-                    if votes_from.len() * 2 > candidate.facts.nodes {
+                    // check if we have enough votes
+                    if candidate.votes_from.len() * 2 > candidate.facts.nodes {
                         // become leader
                         let leader = Leader {
                             facts: candidate.facts,
                             term: candidate.term,
                         };
 
-                        return (State::Leader(leader), false);
+                        *self = State::Leader(leader);
+                    } else {
+                        // keep waiting for more votes
                     }
-
-                    (
-                        State::Candidate(Candidate {
-                            facts: candidate.facts,
-                            term: candidate.term,
-                            election_timeout: candidate.election_timeout,
-                            votes_from,
-                            emission_timeout: candidate.emission_timeout,
-                        }),
-                        false,
-                    )
                 } else {
-                    (State::Candidate(candidate), false)
+                    // keep waiting for more votes
                 }
             }
-            State::Leader(leader) => (State::Leader(leader), false),
+            State::Leader(_) => {
+                // ignore the response
+            }
         }
+        false
     }
 
     /// - Client code should call this method when receiving a AppendEntries request.
     /// - Client code should spawn a new election timer expiring at `timeout` when this method returns true.
-    pub fn ping(self, term: Term, timeout: Instant) -> (State, bool) {
-        if self.try_upgrade_term(term, timeout) {
-            return (self, true);
+    pub fn ping(&mut self, term: Term, timeout: Instant) -> Result<bool, PingError> {
+        if self.try_upgrade_term(term, timeout, None) {
+            return Ok(true);
         }
 
         if self.term() > term {
             // ignore the ping
-            return (self, false);
+            return Ok(false);
         }
 
         match self {
-            State::Follower(follower) => (
-                State::Follower(Follower {
-                    facts: follower.facts,
-                    term: follower.term,
-                    election_timeout: timeout,
-                    votes_for: follower.votes_for,
-                }),
-                true,
-            ),
-            State::Candidate(candidate) => (
+            State::Follower(follower) => {
+                // update the election timeout
+                follower.election_timeout = timeout;
+
+                Ok(true)
+            }
+            State::Candidate(candidate) => {
                 // become follower
-                State::Follower(Follower {
+                let follower = Follower {
                     facts: candidate.facts,
                     term: candidate.term,
                     election_timeout: timeout,
                     votes_for: Some(candidate.facts.id),
-                }),
-                true,
-            ),
-            State::Leader(leader) => panic!("leader should not receive ping"),
+                };
+                *self = State::Follower(follower);
+
+                Ok(true)
+            }
+            State::Leader(_) => {
+                // there should be only one leader sending heartbeats
+                Err(PingError::MultiLeaders)
+            }
         }
     }
 
     /// - Client code should call this method when receiving a AppendEntries response.
     /// - Client code should spawn a new election timer expiring at `timeout` when this method returns true.
-    pub fn pong(self, term: Term, timeout: Instant) -> (State, bool) {
-        if self.try_upgrade_term(term, timeout) {
-            return (self, true);
+    pub fn pong(&mut self, term: Term, timeout: Instant) -> Result<bool, PongError> {
+        if self.try_upgrade_term(term, timeout, None) {
+            return Ok(true);
         }
 
         if self.term() > term {
             // ignore the pong
-            return (self, false);
+            return Ok(false);
         }
 
         match self {
-            State::Follower(follower) => (State::Follower(follower), false),
-            State::Candidate(candidate) => (State::Candidate(candidate), false),
-            State::Leader(leader) => (State::Leader(leader), false),
+            State::Follower(_) => {
+                // only leader can send heartbeats
+                Err(PongError::NotLeader)
+            }
+            State::Candidate(_) => {
+                // only leader can send heartbeats
+                Err(PongError::NotLeader)
+            }
+            State::Leader(_) => {
+                // ignore the pong
+                Ok(false)
+            }
         }
     }
 
-    fn try_upgrade_term(&mut self, term: Term, timeout: Instant) -> bool {
+    /// - Upgrades the term if the given term is greater than the current term.
+    /// - `self` becomes Follower if the given term is greater than the current term.
+    fn try_upgrade_term(&mut self, term: Term, timeout: Instant, votes_for: Option<Node>) -> bool {
         if self.term() < term {
             // follow the new term
             let follower = Follower {
                 facts: *self.facts(),
                 term,
                 election_timeout: timeout,
-                votes_for: None,
+                votes_for,
             };
 
             *self = State::Follower(follower);
@@ -339,4 +339,12 @@ pub struct RequestVoteRes {
 
 pub enum Msg {
     RequestVote { term: Term, from: Node },
+}
+
+pub enum PingError {
+    MultiLeaders,
+}
+
+pub enum PongError {
+    NotLeader,
 }
