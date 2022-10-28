@@ -53,47 +53,52 @@ impl State {
 
     /// - When the method returns true, client code should spawn a new election timer expiring at `timeout`.
     /// - Client code should call this method when the election timer expires.
-    pub fn elect(self, now: Instant, timeout: Instant) -> (State, bool) {
+    pub fn elect(&mut self, now: Instant, timeout: Instant) -> bool {
         match self {
             State::Follower(follower) => {
                 if follower.election_timeout > now {
-                    (State::Follower(follower), false)
+                    // We are not yet timed out.
+                    false
                 } else {
                     // start election
                     let votes_from = HashSet::from_iter(vec![follower.facts.id]);
 
-                    (
-                        State::Candidate(Candidate {
-                            facts: follower.facts,
-                            term: follower.term + 1,
-                            election_timeout: timeout,
-                            votes_from,
-                            emission_timeout: now,
-                        }),
-                        true,
-                    )
+                    let candidate = Candidate {
+                        facts: follower.facts,
+                        term: follower.term + 1,
+                        election_timeout: timeout,
+                        votes_from,
+                        emission_timeout: now,
+                    };
+                    *self = State::Candidate(candidate);
+
+                    true
                 }
             }
             State::Candidate(candidate) => {
                 if candidate.election_timeout > now {
-                    (State::Candidate(candidate), false)
+                    // We are not yet timed out.
+                    false
                 } else {
                     // new election
                     let votes_from = HashSet::from_iter(vec![candidate.facts.id]);
 
-                    (
-                        State::Candidate(Candidate {
-                            facts: candidate.facts,
-                            term: candidate.term + 1,
-                            election_timeout: timeout,
-                            votes_from,
-                            emission_timeout: now,
-                        }),
-                        true,
-                    )
+                    let candidate = Candidate {
+                        facts: candidate.facts,
+                        term: candidate.term + 1,
+                        election_timeout: timeout,
+                        votes_from,
+                        emission_timeout: now,
+                    };
+                    *self = State::Candidate(candidate);
+
+                    true
                 }
             }
-            State::Leader(leader) => (State::Leader(leader), false),
+            State::Leader(_) => {
+                // We are already leader, no need to start a new election.
+                false
+            }
         }
     }
 
