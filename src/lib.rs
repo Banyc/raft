@@ -1,4 +1,4 @@
-pub mod state;
+pub mod election;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Node(pub u64);
