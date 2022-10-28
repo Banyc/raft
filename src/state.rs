@@ -26,11 +26,11 @@ impl State {
         match self {
             State::Follower(_) => None,
             State::Candidate(candidate) => {
-                if now < candidate.emit_timeout {
+                if now < candidate.emission_timeout {
                     return None;
                 }
 
-                candidate.emit_timeout = timeout;
+                candidate.emission_timeout = timeout;
 
                 let msg = Msg::RequestVote {
                     term: candidate.term,
@@ -59,7 +59,7 @@ impl State {
                             term: follower.term + 1,
                             election_timeout: timeout,
                             votes_from,
-                            emit_timeout: now,
+                            emission_timeout: now,
                         }),
                         true,
                     )
@@ -78,7 +78,7 @@ impl State {
                             term: candidate.term + 1,
                             election_timeout: timeout,
                             votes_from,
-                            emit_timeout: now,
+                            emission_timeout: now,
                         }),
                         true,
                     )
@@ -237,7 +237,7 @@ impl State {
                             term: candidate.term,
                             election_timeout: candidate.election_timeout,
                             votes_from,
-                            emit_timeout: candidate.emit_timeout,
+                            emission_timeout: candidate.emission_timeout,
                         }),
                         false,
                     )
@@ -262,7 +262,7 @@ pub struct Candidate {
     term: Term,
     election_timeout: Instant,
     votes_from: HashSet<Node>,
-    emit_timeout: Instant,
+    emission_timeout: Instant,
 }
 
 pub struct Leader {
