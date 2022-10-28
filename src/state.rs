@@ -1,6 +1,6 @@
 use std::{collections::HashSet, time::Instant};
 
-use crate::{Msg, Node, Term};
+use crate::{Node, Term};
 
 pub enum State {
     Follower(Follower),
@@ -106,18 +106,9 @@ impl State {
 
     /// - Client code should spawn a new election timer expiring at `timeout` when `spawn_election_timer` is true.
     pub fn request_vote(self, from: Node, term: Term, timeout: Instant) -> (State, RequestVoteRes) {
-        if self.term() < term {
-            // follow the new term
-            let follower = Follower {
-                facts: *self.facts(),
-                term,
-                election_timeout: timeout,
-                votes_for: Some(from),
-            };
-
-            // vote for the candidate
+        if self.try_upgrade_term(term, timeout) {
             return (
-                State::Follower(follower),
+                self,
                 RequestVoteRes {
                     vote_granted: true,
                     spawn_election_timer: true,
@@ -197,16 +188,8 @@ impl State {
         vote_granted: bool,
         timeout: Instant,
     ) -> (State, bool) {
-        if self.term() < term {
-            // follow the new term
-            let follower = Follower {
-                facts: *self.facts(),
-                term,
-                election_timeout: timeout,
-                votes_for: None,
-            };
-
-            return (State::Follower(follower), true);
+        if self.try_upgrade_term(term, timeout) {
+            return (self, true);
         }
 
         if self.term() > term {
@@ -248,6 +231,79 @@ impl State {
             State::Leader(leader) => (State::Leader(leader), false),
         }
     }
+
+    /// - Client code should call this method when receiving a AppendEntries request.
+    /// - Client code should spawn a new election timer expiring at `timeout` when this method returns true.
+    pub fn ping(self, term: Term, timeout: Instant) -> (State, bool) {
+        if self.try_upgrade_term(term, timeout) {
+            return (self, true);
+        }
+
+        if self.term() > term {
+            // ignore the ping
+            return (self, false);
+        }
+
+        match self {
+            State::Follower(follower) => (
+                State::Follower(Follower {
+                    facts: follower.facts,
+                    term: follower.term,
+                    election_timeout: timeout,
+                    votes_for: follower.votes_for,
+                }),
+                true,
+            ),
+            State::Candidate(candidate) => (
+                // become follower
+                State::Follower(Follower {
+                    facts: candidate.facts,
+                    term: candidate.term,
+                    election_timeout: timeout,
+                    votes_for: Some(candidate.facts.id),
+                }),
+                true,
+            ),
+            State::Leader(leader) => panic!("leader should not receive ping"),
+        }
+    }
+
+    /// - Client code should call this method when receiving a AppendEntries response.
+    /// - Client code should spawn a new election timer expiring at `timeout` when this method returns true.
+    pub fn pong(self, term: Term, timeout: Instant) -> (State, bool) {
+        if self.try_upgrade_term(term, timeout) {
+            return (self, true);
+        }
+
+        if self.term() > term {
+            // ignore the pong
+            return (self, false);
+        }
+
+        match self {
+            State::Follower(follower) => (State::Follower(follower), false),
+            State::Candidate(candidate) => (State::Candidate(candidate), false),
+            State::Leader(leader) => (State::Leader(leader), false),
+        }
+    }
+
+    fn try_upgrade_term(&mut self, term: Term, timeout: Instant) -> bool {
+        if self.term() < term {
+            // follow the new term
+            let follower = Follower {
+                facts: *self.facts(),
+                term,
+                election_timeout: timeout,
+                votes_for: None,
+            };
+
+            *self = State::Follower(follower);
+
+            true
+        } else {
+            false
+        }
+    }
 }
 
 pub struct Follower {
@@ -279,4 +335,8 @@ pub struct Facts {
 pub struct RequestVoteRes {
     pub vote_granted: bool,
     pub spawn_election_timer: bool,
+}
+
+pub enum Msg {
+    RequestVote { term: Term, from: Node },
 }
