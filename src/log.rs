@@ -8,6 +8,7 @@ pub struct Log {
 }
 
 impl Log {
+    #[must_use]
     pub fn new() -> Self {
         Log {
             committed: Vec::new(),
@@ -15,7 +16,8 @@ impl Log {
         }
     }
 
-    pub fn term(&self, index: usize) -> Option<(Term, EntryState)> {
+    #[must_use]
+    pub fn entry(&self, index: usize) -> Option<(Term, EntryState)> {
         if index < self.committed.len() {
             Some((self.committed[index], EntryState::Committed))
         } else if index < self.committed.len() + self.uncommitted.len() {
@@ -28,6 +30,7 @@ impl Log {
         }
     }
 
+    #[must_use]
     fn uncommitted_index(&self, index: usize) -> Option<usize> {
         if index < self.committed.len() {
             None
@@ -48,6 +51,7 @@ impl Log {
         self.uncommitted.extend(new_entries);
     }
 
+    #[must_use]
     pub fn try_commit(&mut self, index: usize) -> bool {
         if index < self.committed.len() {
             return true;
@@ -62,12 +66,36 @@ impl Log {
         true
     }
 
+    #[must_use]
     pub fn committed(&self) -> &[Term] {
         &self.committed
     }
 
+    #[must_use]
     pub fn uncommitted(&self) -> &VecDeque<Term> {
         &self.uncommitted
+    }
+
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.committed.len() + self.uncommitted.len()
+    }
+
+    #[must_use]
+    pub fn entries_from(&self, index: usize) -> impl Iterator<Item = &Term> {
+        self.committed
+            .iter()
+            .chain(self.uncommitted.iter())
+            .skip(index)
+    }
+
+    #[must_use]
+    pub fn commit_index(&self) -> Option<usize> {
+        if self.committed.is_empty() {
+            None
+        } else {
+            Some(self.committed.len() - 1)
+        }
     }
 }
 

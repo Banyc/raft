@@ -23,7 +23,7 @@ impl Follower {
     ) -> AppendRes {
         let mut start = match prev_entry {
             Some(prev) => {
-                let (term, state) = match self.log.term(prev.index) {
+                let (term, state) = match self.log.entry(prev.index) {
                     Some(v) => v,
                     None => return AppendRes::NewEntriesTooFarAhead,
                 };
@@ -44,7 +44,7 @@ impl Follower {
 
         // discard duplicate entries
         while let Some(&term) = new_entries.front() {
-            if let Some((existing_term, state)) = self.log.term(start) {
+            if let Some((existing_term, state)) = self.log.entry(start) {
                 if existing_term == term {
                     new_entries.pop_front();
                     start += 1;
@@ -76,6 +76,10 @@ impl Follower {
             true => Ok(()),
             false => Err(CommitError::LogTooShort),
         }
+    }
+
+    pub fn into_log(self) -> Log {
+        self.log
     }
 }
 
