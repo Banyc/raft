@@ -1,4 +1,5 @@
 pub mod election;
+pub mod log;
 pub mod log_replication;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

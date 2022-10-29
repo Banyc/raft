@@ -1,7 +1,7 @@
 use std::collections::VecDeque;
 
 use crate::{
-    log_replication::log::{EntryState, Log},
+    log::{EntryState, Log},
     Term,
 };
 
