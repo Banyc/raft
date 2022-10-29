@@ -5,6 +5,8 @@ use crate::{
     Term,
 };
 
+use super::EntryMeta;
+
 pub struct Follower {
     log: Log,
 }
@@ -99,13 +101,10 @@ pub enum CommitError {
     LogTooShort,
 }
 
-pub struct EntryMeta {
-    pub index: usize,
-    pub term: Term,
-}
-
 #[cfg(test)]
 mod tests {
+    use crate::log_replication::EntryMeta;
+
     use super::*;
 
     #[test]

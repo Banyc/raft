@@ -1,4 +1,4 @@
-use crate::{log::Log, Node};
+use crate::{log::Log, Node, Term};
 
 use self::{follower::Follower, leader::Leader};
 
@@ -41,4 +41,10 @@ impl State {
             State::Leader(leader) => leader.log(),
         }
     }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct EntryMeta {
+    pub index: usize,
+    pub term: Term,
 }
