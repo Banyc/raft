@@ -157,7 +157,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn emit() {
+    fn emit_none_prev() {
         let log = Log::new();
         let leader = Leader::new(log, &[Node(1)]);
         let req = leader.emit(Node(1)).unwrap();
@@ -167,13 +167,64 @@ mod tests {
     }
 
     #[test]
-    fn append_entries_resp() {
+    fn emit_some_prev() {
         let mut log = Log::new();
         log.append(vec![1]);
         let mut leader = Leader::new(log, &[Node(1)]);
+
+        leader.follower_logs.get_mut(&Node(1)).unwrap().next_index = 1;
+        leader.follower_logs.get_mut(&Node(1)).unwrap().match_index = None;
+
+        let req = leader.emit(Node(1)).unwrap();
+
+        assert_eq!(req.prev_entry, Some(EntryMeta { index: 0, term: 1 }));
+        assert_eq!(req.new_entries, vec![]);
+        assert_eq!(req.commit_index, None);
+    }
+
+    #[test]
+    fn append_entries_resp_success() {
+        let mut log = Log::new();
+        log.append(vec![1]);
+        let mut leader = Leader::new(log, &[Node(1)]);
+
+        assert_eq!(leader.follower_logs.get(&Node(1)).unwrap().next_index, 1);
+        assert_eq!(
+            leader.follower_logs.get(&Node(1)).unwrap().match_index,
+            None
+        );
+
+        // Request:
+        // prev_entry = None
+        // new_entries = [1]
+
         leader
             .append_entries_resp(1, Node(1), AppendEntriesRes::Success { match_index: 0 })
             .unwrap();
         assert_eq!(leader.log().commit_index(), Some(0));
+    }
+
+    #[test]
+    fn append_entries_resp_failure() {
+        let mut log = Log::new();
+        log.append(vec![1]);
+        let mut leader = Leader::new(log, &[Node(1)]);
+
+        assert_eq!(leader.follower_logs.get(&Node(1)).unwrap().next_index, 1);
+        assert_eq!(
+            leader.follower_logs.get(&Node(1)).unwrap().match_index,
+            None
+        );
+
+        leader
+            .append_entries_resp(1, Node(1), AppendEntriesRes::Failure { new_next_index: 0 })
+            .unwrap();
+
+        assert_eq!(leader.log().commit_index(), None);
+        assert_eq!(leader.follower_logs.get(&Node(1)).unwrap().next_index, 0);
+        assert_eq!(
+            leader.follower_logs.get(&Node(1)).unwrap().match_index,
+            None
+        );
     }
 }
