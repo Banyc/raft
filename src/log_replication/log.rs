@@ -3,8 +3,8 @@ use std::collections::VecDeque;
 use crate::Term;
 
 pub struct Log {
-    committed: Vec<Entry>,
-    uncommitted: VecDeque<Entry>,
+    committed: Vec<Term>,
+    uncommitted: VecDeque<Term>,
 }
 
 impl Log {
@@ -15,12 +15,12 @@ impl Log {
         }
     }
 
-    pub fn entry(&self, index: usize) -> Option<(&Entry, EntryState)> {
+    pub fn term(&self, index: usize) -> Option<(Term, EntryState)> {
         if index < self.committed.len() {
-            Some((&self.committed[index], EntryState::Committed))
+            Some((self.committed[index], EntryState::Committed))
         } else if index < self.committed.len() + self.uncommitted.len() {
             Some((
-                &self.uncommitted[index - self.committed.len()],
+                self.uncommitted[index - self.committed.len()],
                 EntryState::Uncommitted,
             ))
         } else {
@@ -44,7 +44,7 @@ impl Log {
         }
     }
 
-    pub fn append(&mut self, new_entries: impl IntoIterator<Item = Entry>) {
+    pub fn append(&mut self, new_entries: impl IntoIterator<Item = Term>) {
         self.uncommitted.extend(new_entries);
     }
 
@@ -62,18 +62,13 @@ impl Log {
         true
     }
 
-    pub fn committed(&self) -> &[Entry] {
+    pub fn committed(&self) -> &[Term] {
         &self.committed
     }
 
-    pub fn uncommitted(&self) -> &VecDeque<Entry> {
+    pub fn uncommitted(&self) -> &VecDeque<Term> {
         &self.uncommitted
     }
-}
-
-pub struct Entry {
-    pub term: Term,
-    pub command: Command,
 }
 
 pub type Command = Vec<u8>;
