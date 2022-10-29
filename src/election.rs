@@ -119,7 +119,13 @@ impl State {
     }
 
     /// - Client code should spawn a new election timer expiring at `timeout` when `spawn_election_timer` is true.
-    pub fn request_vote(&mut self, from: Node, term: Term, timeout: Instant) -> RequestVoteRes {
+    pub fn request_vote(
+        &mut self,
+        from: Node,
+        term: Term,
+        timeout: Instant,
+        disqualified: bool,
+    ) -> RequestVoteRes {
         if self.try_upgrade_term(term, timeout, Some(from)) {
             // vote for the candidate
             return RequestVoteRes {
@@ -155,27 +161,33 @@ impl State {
                         }
                     }
                     None => {
-                        // vote for the candidate
-                        follower.votes_for = Some(from);
+                        if disqualified {
+                            // reject the request
+                            RequestVoteRes {
+                                vote_granted: false,
+                                spawn_election_timer: false,
+                            }
+                        } else {
+                            // vote for the candidate
+                            follower.votes_for = Some(from);
 
-                        RequestVoteRes {
-                            vote_granted: true,
-                            spawn_election_timer: false,
+                            RequestVoteRes {
+                                vote_granted: true,
+                                spawn_election_timer: false,
+                            }
                         }
                     }
                 }
             }
-            State::Candidate(_) =>
-            // already voted for themselves
-            {
+            State::Candidate(_) => {
+                // already voted for themselves
                 RequestVoteRes {
                     vote_granted: false,
                     spawn_election_timer: false,
                 }
             }
-            State::Leader(_) =>
-            // already voted for themselves
-            {
+            State::Leader(_) => {
+                // already voted for themselves
                 RequestVoteRes {
                     vote_granted: false,
                     spawn_election_timer: false,
@@ -415,7 +427,7 @@ mod tests {
             BroadcastMsg::Ping { .. } => panic!(),
         }
 
-        let resp = s2.request_vote(Node(1), 1, now);
+        let resp = s2.request_vote(Node(1), 1, now, false);
         assert_eq!(resp.vote_granted, false);
         assert_eq!(resp.spawn_election_timer, false);
 
@@ -426,7 +438,7 @@ mod tests {
             State::Leader(_) => panic!(),
         }
 
-        let resp = s3.request_vote(Node(1), 1, now);
+        let resp = s3.request_vote(Node(1), 1, now, false);
         assert_eq!(resp.vote_granted, true);
         assert_eq!(resp.spawn_election_timer, true);
         assert_eq!(s3.term(), 1);
@@ -447,7 +459,7 @@ mod tests {
             BroadcastMsg::Ping { .. } => panic!(),
         }
 
-        let resp = s1.request_vote(Node(2), 1, now);
+        let resp = s1.request_vote(Node(2), 1, now, false);
         assert_eq!(resp.vote_granted, false);
         assert_eq!(resp.spawn_election_timer, false);
 
@@ -458,7 +470,7 @@ mod tests {
             State::Leader(_) => panic!(),
         }
 
-        let resp = s3.request_vote(Node(2), 1, now);
+        let resp = s3.request_vote(Node(2), 1, now, false);
         assert_eq!(resp.vote_granted, false);
         assert_eq!(resp.spawn_election_timer, false);
 
