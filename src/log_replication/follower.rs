@@ -32,11 +32,7 @@ impl Follower {
                 if term != prev.term {
                     match state {
                         EntryState::Committed => return AppendRes::CommittedLogMismatch,
-                        EntryState::Uncommitted => {
-                            // We need to truncate the log
-                            self.log.remove_uncommitted_from(prev.index);
-                            return AppendRes::NewEntriesTooFarAhead;
-                        }
+                        EntryState::Uncommitted => return AppendRes::NewEntriesTooFarAhead,
                     }
                 }
                 prev.index + 1
@@ -93,6 +89,8 @@ impl Follower {
 pub enum AppendRes {
     CommittedLogMismatch,
     Success,
+
+    // - Respond with success = false
     NewEntriesTooFarAhead,
 }
 
@@ -187,5 +185,22 @@ mod tests {
 
         let res = follower.append(vec![1].into(), Some(EntryMeta { index: 0, term: 1 }));
         assert_eq!(res, AppendRes::CommittedLogMismatch);
+    }
+
+    #[test]
+    fn append_some_prev_wrong_term() {
+        let mut follower = Follower::new(Log::new());
+
+        let res = follower.append(vec![0].into(), None);
+        assert_eq!(res, AppendRes::Success);
+
+        // [][0]
+
+        let res = follower.append(vec![0].into(), Some(EntryMeta { index: 0, term: 1 }));
+
+        // [][0]
+
+        assert_eq!(res, AppendRes::NewEntriesTooFarAhead);
+        assert_eq!(follower.log.uncommitted().len(), 1);
     }
 }
