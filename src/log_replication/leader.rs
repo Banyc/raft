@@ -76,6 +76,14 @@ impl Leader {
             assert!(success);
         }
     }
+
+    pub fn into_log(self) -> Log {
+        self.log
+    }
+
+    pub fn log(&self) -> &Log {
+        &self.log
+    }
 }
 
 struct FollowerLog {

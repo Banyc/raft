@@ -11,8 +11,8 @@ pub struct Follower {
 
 impl Follower {
     #[must_use]
-    pub fn new() -> Follower {
-        Follower { log: Log::new() }
+    pub fn new(log: Log) -> Follower {
+        Follower { log }
     }
 
     #[must_use]
@@ -81,6 +81,10 @@ impl Follower {
     pub fn into_log(self) -> Log {
         self.log
     }
+
+    pub fn log(&self) -> &Log {
+        &self.log
+    }
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -106,7 +110,7 @@ mod tests {
 
     #[test]
     fn append_none_prev_to_empty_log() {
-        let mut follower = Follower::new();
+        let mut follower = Follower::new(Log::new());
         let res = follower.append(vec![0].into(), None);
         assert_eq!(res, AppendRes::Success);
         assert_eq!(follower.log.uncommitted().len(), 1);
@@ -114,7 +118,7 @@ mod tests {
 
     #[test]
     fn append_none_prev_to_uncommitted_log() {
-        let mut follower = Follower::new();
+        let mut follower = Follower::new(Log::new());
 
         let res = follower.append(vec![0].into(), None);
         assert_eq!(res, AppendRes::Success);
@@ -126,7 +130,7 @@ mod tests {
 
     #[test]
     fn append_none_prev_to_committed_log() {
-        let mut follower = Follower::new();
+        let mut follower = Follower::new(Log::new());
 
         let res = follower.append(vec![0].into(), None);
         assert_eq!(res, AppendRes::Success);
@@ -143,7 +147,7 @@ mod tests {
 
     #[test]
     fn append_some_prev_to_empty_log() {
-        let mut follower = Follower::new();
+        let mut follower = Follower::new(Log::new());
         let res = follower.append(vec![0].into(), Some(EntryMeta { index: 0, term: 0 }));
         assert_eq!(res, AppendRes::NewEntriesTooFarAhead);
         assert_eq!(follower.log.uncommitted().len(), 0);
@@ -151,7 +155,7 @@ mod tests {
 
     #[test]
     fn append_some_prev_to_uncommitted_log() {
-        let mut follower = Follower::new();
+        let mut follower = Follower::new(Log::new());
 
         let res = follower.append(vec![0].into(), None);
         assert_eq!(res, AppendRes::Success);
@@ -163,7 +167,7 @@ mod tests {
 
     #[test]
     fn append_some_prev_to_committed_log() {
-        let mut follower = Follower::new();
+        let mut follower = Follower::new(Log::new());
 
         // [][]
 
