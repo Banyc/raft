@@ -40,14 +40,15 @@ impl Follower {
             None => 0,
         };
 
-        // discard duplicate entries
         while let Some(&term) = new_entries.front() {
             if let Some((existing_term, state)) = self.log.entry(start) {
                 if existing_term == term {
+                    // Discard duplicate entries
                     new_entries.pop_front();
                     start += 1;
                     continue;
                 }
+                // Overwrite existing entries
                 match state {
                     EntryState::Committed => return AppendRes::CommittedLogMismatch,
                     EntryState::Uncommitted => {
@@ -201,6 +202,23 @@ mod tests {
         // [][0]
 
         assert_eq!(res, AppendRes::NewEntriesTooFarAhead);
+        assert_eq!(follower.log.uncommitted().len(), 1);
+    }
+
+    #[test]
+    fn append_overwrite() {
+        let mut follower = Follower::new(Log::new());
+
+        let res = follower.append(vec![0].into(), None);
+        assert_eq!(res, AppendRes::Success);
+
+        // [][0]
+
+        let res = follower.append(vec![1].into(), None);
+
+        // [][1]
+
+        assert_eq!(res, AppendRes::Success);
         assert_eq!(follower.log.uncommitted().len(), 1);
     }
 }
