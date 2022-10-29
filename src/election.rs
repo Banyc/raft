@@ -1,6 +1,6 @@
 use std::{collections::HashSet, time::Instant};
 
-use crate::{Node, Term};
+use crate::{Facts, Node, Term};
 
 pub enum State {
     Follower(Follower),
@@ -341,12 +341,6 @@ pub struct Leader {
     facts: Facts,
     term: Term,
     emission_timeout: Instant,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct Facts {
-    pub id: Node,
-    pub nodes: usize,
 }
 
 pub struct RequestVoteRes {
