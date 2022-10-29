@@ -2,33 +2,40 @@ use std::collections::HashMap;
 
 use crate::{log::Log, Node, Term};
 
+use super::EntryMeta;
+
 pub struct Leader {
     log: Log,
     follower_logs: HashMap<Node, FollowerLog>,
 }
 
 impl Leader {
-    pub fn new(log: Log, nodes: &[Node]) -> Self {
+    pub fn new(log: Log, followers: &[Node]) -> Self {
         let mut follower_logs = HashMap::new();
-        for node in nodes {
+        for id in followers {
             follower_logs.insert(
-                *node,
+                *id,
                 FollowerLog {
                     next_index: log.len(),
                     match_index: None,
                 },
             );
         }
-        Leader {
-            log,
-            follower_logs: HashMap::new(),
-        }
+        Leader { log, follower_logs }
     }
 
     pub fn emit(&self, to: Node) -> Result<AppendEntriesReq, EmitError> {
         let follower_log = self.follower_logs.get(&to).ok_or(EmitError::UnknownNode)?;
-        let prev_index = follower_log.next_index - 1;
-        let (prev_term, _) = self.log.entry(prev_index).unwrap();
+        let prev_entry = if follower_log.next_index == 0 {
+            None
+        } else {
+            let prev_index = follower_log.next_index - 1;
+            let (prev_term, _) = self.log.entry(prev_index).unwrap();
+            Some(EntryMeta {
+                index: prev_index,
+                term: prev_term,
+            })
+        };
         let new_entries = self
             .log
             .entries_from(follower_log.next_index)
@@ -36,8 +43,7 @@ impl Leader {
             .collect::<Vec<_>>();
         Ok(AppendEntriesReq {
             new_entries,
-            prev_index,
-            prev_term,
+            prev_entry,
             commit_index: self.log.commit_index(),
         })
     }
@@ -93,8 +99,7 @@ struct FollowerLog {
 
 pub struct AppendEntriesReq {
     pub new_entries: Vec<Term>,
-    pub prev_index: usize,
-    pub prev_term: Term,
+    pub prev_entry: Option<EntryMeta>,
     pub commit_index: Option<usize>,
 }
 
@@ -104,6 +109,22 @@ pub enum AppendEntriesRes {
     Failure,
 }
 
+#[derive(Debug)]
 pub enum EmitError {
     UnknownNode,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn emit() {
+        let log = Log::new();
+        let leader = Leader::new(log, &[Node(1)]);
+        let req = leader.emit(Node(1)).unwrap();
+        assert_eq!(req.prev_entry, None);
+        assert_eq!(req.new_entries, vec![]);
+        assert_eq!(req.commit_index, None);
+    }
 }
