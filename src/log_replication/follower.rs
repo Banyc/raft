@@ -25,7 +25,7 @@ impl Follower {
             Some(prev) => {
                 let (term, state) = match self.log.term(prev.index) {
                     Some(v) => v,
-                    None => return AppendRes::NewEntriesTooFarHead,
+                    None => return AppendRes::NewEntriesTooFarAhead,
                 };
                 if term != prev.term {
                     match state {
@@ -33,7 +33,7 @@ impl Follower {
                         EntryState::Uncommitted => {
                             // We need to truncate the log
                             self.log.remove_uncommitted_from(prev.index);
-                            return AppendRes::NewEntriesTooFarHead;
+                            return AppendRes::NewEntriesTooFarAhead;
                         }
                     }
                 }
@@ -83,7 +83,7 @@ impl Follower {
 pub enum AppendRes {
     CommittedLogMismatch,
     Success,
-    NewEntriesTooFarHead,
+    NewEntriesTooFarAhead,
 }
 
 #[derive(Debug)]
@@ -141,7 +141,7 @@ mod tests {
     fn append_some_prev_to_empty_log() {
         let mut follower = Follower::new();
         let res = follower.append(vec![0].into(), Some(EntryMeta { index: 0, term: 0 }));
-        assert_eq!(res, AppendRes::NewEntriesTooFarHead);
+        assert_eq!(res, AppendRes::NewEntriesTooFarAhead);
         assert_eq!(follower.log.uncommitted().len(), 0);
     }
 
