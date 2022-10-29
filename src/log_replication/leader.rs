@@ -48,20 +48,41 @@ impl Leader {
         })
     }
 
-    pub fn append_entries_resp(&mut self, term: Term, from: Node, res: AppendEntriesRes) {
-        let follower_log = self.follower_logs.get_mut(&from).unwrap();
+    pub fn append_entries_resp(
+        &mut self,
+        term: Term,
+        from: Node,
+        res: AppendEntriesRes,
+    ) -> Result<(), AppendEntriesError> {
+        let follower_log = self
+            .follower_logs
+            .get_mut(&from)
+            .ok_or(AppendEntriesError::UnknownNode)?;
         match res {
             AppendEntriesRes::Success { match_index } => {
+                if match_index >= self.log.len() {
+                    return Err(AppendEntriesError::InvalidMatchIndex);
+                }
+                if let Some(existing_match_index) = follower_log.match_index {
+                    if match_index < existing_match_index {
+                        return Err(AppendEntriesError::MatchIndexTooSmall);
+                    }
+                }
+
                 follower_log.match_index = Some(match_index);
                 follower_log.next_index = match_index + 1;
             }
-            // AppendEntriesRes::Failure { next_index } => {
-            //     follower_log.next_index = next_index;
-            // }
-            AppendEntriesRes::Failure => {
-                follower_log.next_index -= 1;
+            AppendEntriesRes::Failure { new_next_index } => {
+                if new_next_index >= self.log.len() {
+                    return Err(AppendEntriesError::InvalidNextIndex);
+                }
+                if follower_log.next_index < new_next_index {
+                    return Err(AppendEntriesError::NextIndexTooLarge);
+                }
 
-                return;
+                follower_log.next_index = new_next_index;
+
+                return Ok(());
             }
         }
 
@@ -69,7 +90,7 @@ impl Leader {
         if let Some(&last_term) = self.log.uncommitted().back() {
             if last_term != term {
                 // a leader cannot determine commitment using log entries from older terms
-                return;
+                return Ok(());
             }
             let mut match_indices = self
                 .follower_logs
@@ -81,6 +102,7 @@ impl Leader {
             let success = self.log.try_commit(commit_index);
             assert!(success);
         }
+        Ok(())
     }
 
     pub fn into_log(self) -> Log {
@@ -93,7 +115,10 @@ impl Leader {
 }
 
 struct FollowerLog {
+    /// - Next index to send to the follower
     next_index: usize,
+
+    /// - Goal: the majority of them determines how many new entries the leader is allowed to commit
     match_index: Option<usize>,
 }
 
@@ -105,13 +130,26 @@ pub struct AppendEntriesReq {
 
 pub enum AppendEntriesRes {
     Success { match_index: usize },
-    // Failure { next_index: usize },
-    Failure,
+    Failure { new_next_index: usize },
 }
 
 #[derive(Debug)]
 pub enum EmitError {
     UnknownNode,
+}
+
+#[derive(Debug)]
+pub enum AppendEntriesError {
+    UnknownNode,
+    InvalidMatchIndex,
+
+    /// - Could happen if the leader receives an out-of-order response
+    MatchIndexTooSmall,
+
+    InvalidNextIndex,
+
+    /// - Could happen if the leader receives an out-of-order response
+    NextIndexTooLarge,
 }
 
 #[cfg(test)]
@@ -126,5 +164,16 @@ mod tests {
         assert_eq!(req.prev_entry, None);
         assert_eq!(req.new_entries, vec![]);
         assert_eq!(req.commit_index, None);
+    }
+
+    #[test]
+    fn append_entries_resp() {
+        let mut log = Log::new();
+        log.append(vec![1]);
+        let mut leader = Leader::new(log, &[Node(1)]);
+        leader
+            .append_entries_resp(1, Node(1), AppendEntriesRes::Success { match_index: 0 })
+            .unwrap();
+        assert_eq!(leader.log().commit_index(), Some(0));
     }
 }
