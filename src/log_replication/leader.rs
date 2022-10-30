@@ -250,7 +250,29 @@ mod tests {
     }
 
     #[test]
-    fn append_entries_resp_success() {
+    fn append_entries_resp_success_none_match_index() {
+        let log = Log::new();
+
+        let mut leader = Leader::new(log, &[Node(1)]);
+
+        assert_eq!(leader.follower_logs.get(&Node(1)).unwrap().next_index, 0);
+        assert_eq!(
+            leader.follower_logs.get(&Node(1)).unwrap().match_index,
+            None
+        );
+
+        // Request:
+        // prev_entry = None
+        // new_entries = []
+
+        leader
+            .append_entries_resp(1, Node(1), AppendEntriesRes::Success { match_index: None })
+            .unwrap();
+        assert_eq!(leader.log().commit_index(), None);
+    }
+
+    #[test]
+    fn append_entries_resp_success_some_match_index() {
         let mut log = Log::new();
         log.append(vec![1]);
         let mut leader = Leader::new(log, &[Node(1)]);
