@@ -5,12 +5,25 @@ use crate::{log::Log, Node, Term};
 use super::EntryMeta;
 
 pub struct Leader {
+    term: Term,
     log: Log,
     follower_logs: HashMap<Node, FollowerLog>,
 }
 
+#[derive(Debug, PartialEq, Eq)]
+pub enum NewError {
+    TermTooSmall,
+}
+
 impl Leader {
-    pub fn new(log: Log, followers: &[Node]) -> Self {
+    pub fn new(term: Term, log: Log, followers: &[Node]) -> Result<Self, NewError> {
+        if log.len() > 0 {
+            let (log_term, _) = log.entry(log.len() - 1).unwrap();
+            if term < log_term {
+                return Err(NewError::TermTooSmall);
+            }
+        }
+
         let mut follower_logs = HashMap::new();
         for id in followers {
             follower_logs.insert(
@@ -21,7 +34,11 @@ impl Leader {
                 },
             );
         }
-        Leader { log, follower_logs }
+        Ok(Leader {
+            term,
+            log,
+            follower_logs,
+        })
     }
 
     /// - Goal: to compliment what log entries the follower lacks
@@ -62,7 +79,6 @@ impl Leader {
     ///   - what entries the followers lack
     pub fn append_entries_resp(
         &mut self,
-        term: Term,
         from: Node,
         res: AppendEntriesRes,
     ) -> Result<(), AppendEntriesError> {
@@ -116,7 +132,7 @@ impl Leader {
 
         // Commit entries that have replicated in the majority of nodes
         if let Some(&last_term) = self.log.uncommitted().back() {
-            if last_term != term {
+            if last_term != self.term {
                 // a leader cannot determine commitment using log entries from older terms
                 return Ok(());
             }
@@ -226,7 +242,7 @@ mod tests {
     #[test]
     fn emit_none_prev() {
         let log = Log::new();
-        let leader = Leader::new(log, &[Node(1)]);
+        let leader = Leader::new(1, log, &[Node(1)]).unwrap();
         let req = leader.emit(Node(1)).unwrap();
         assert_eq!(req.prev_entry, None);
         assert_eq!(req.new_entries, vec![]);
@@ -237,7 +253,7 @@ mod tests {
     fn emit_some_prev() {
         let mut log = Log::new();
         log.append(vec![1]);
-        let mut leader = Leader::new(log, &[Node(1)]);
+        let mut leader = Leader::new(1, log, &[Node(1)]).unwrap();
 
         leader.follower_logs.get_mut(&Node(1)).unwrap().next_index = 1;
         leader.follower_logs.get_mut(&Node(1)).unwrap().match_index = None;
@@ -253,7 +269,7 @@ mod tests {
     fn append_entries_resp_success_none_match_index() {
         let log = Log::new();
 
-        let mut leader = Leader::new(log, &[Node(1)]);
+        let mut leader = Leader::new(1, log, &[Node(1)]).unwrap();
 
         assert_eq!(leader.follower_logs.get(&Node(1)).unwrap().next_index, 0);
         assert_eq!(
@@ -266,7 +282,7 @@ mod tests {
         // new_entries = []
 
         leader
-            .append_entries_resp(1, Node(1), AppendEntriesRes::Success { match_index: None })
+            .append_entries_resp(Node(1), AppendEntriesRes::Success { match_index: None })
             .unwrap();
         assert_eq!(leader.log().commit_index(), None);
     }
@@ -275,7 +291,7 @@ mod tests {
     fn append_entries_resp_success_some_match_index() {
         let mut log = Log::new();
         log.append(vec![1]);
-        let mut leader = Leader::new(log, &[Node(1)]);
+        let mut leader = Leader::new(1, log, &[Node(1)]).unwrap();
 
         assert_eq!(leader.follower_logs.get(&Node(1)).unwrap().next_index, 1);
         assert_eq!(
@@ -289,7 +305,6 @@ mod tests {
 
         leader
             .append_entries_resp(
-                1,
                 Node(1),
                 AppendEntriesRes::Success {
                     match_index: Some(0),
@@ -303,7 +318,7 @@ mod tests {
     fn append_entries_resp_failure() {
         let mut log = Log::new();
         log.append(vec![1]);
-        let mut leader = Leader::new(log, &[Node(1)]);
+        let mut leader = Leader::new(1, log, &[Node(1)]).unwrap();
 
         assert_eq!(leader.follower_logs.get(&Node(1)).unwrap().next_index, 1);
         assert_eq!(
@@ -312,7 +327,7 @@ mod tests {
         );
 
         leader
-            .append_entries_resp(1, Node(1), AppendEntriesRes::Failure { new_next_index: 0 })
+            .append_entries_resp(Node(1), AppendEntriesRes::Failure { new_next_index: 0 })
             .unwrap();
 
         assert_eq!(leader.log().commit_index(), None);

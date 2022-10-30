@@ -25,13 +25,14 @@ impl State {
         }
     }
 
-    pub fn into_leader(self, followers: &[Node]) -> State {
+    pub fn into_leader(self, term: Term, followers: &[Node]) -> Result<State, IntoLeaderError> {
         match self {
             State::Follower(follower) => {
-                let leader = Leader::new(follower.into_log(), followers);
-                State::Leader(leader)
+                let leader = Leader::new(term, follower.into_log(), followers)
+                    .map_err(|e| IntoLeaderError::LeaderNewError(e))?;
+                Ok(State::Leader(leader))
             }
-            State::Leader(_) => self,
+            State::Leader(_) => Ok(self),
         }
     }
 
@@ -49,13 +50,18 @@ pub struct EntryMeta {
     pub term: Term,
 }
 
+#[derive(Debug, PartialEq, Eq)]
+pub enum IntoLeaderError {
+    LeaderNewError(leader::NewError),
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn empty_entries_success() {
-        let mut s1 = Leader::new(Log::new(), &[Node(2)]);
+        let mut s1 = Leader::new(1, Log::new(), &[Node(2)]).unwrap();
         let mut s2 = Follower::new(Log::new());
 
         let req = s1.emit(Node(2)).unwrap();
@@ -70,7 +76,6 @@ mod tests {
         assert_eq!(s2.log().uncommitted().len(), 0);
 
         s1.append_entries_resp(
-            1,
             Node(2),
             leader::AppendEntriesRes::Success { match_index: None },
         )
@@ -79,7 +84,7 @@ mod tests {
 
     #[test]
     fn some_entries_success() {
-        let mut s1 = Leader::new(Log::new(), &[Node(2)]);
+        let mut s1 = Leader::new(1, Log::new(), &[Node(2)]).unwrap();
         let mut s2 = Follower::new(Log::new());
 
         let idx = s1.log_push(1);
@@ -105,12 +110,8 @@ mod tests {
         // s1: [][1]
         // s2: [][1]
 
-        s1.append_entries_resp(
-            1,
-            Node(2),
-            leader::AppendEntriesRes::Success { match_index },
-        )
-        .unwrap();
+        s1.append_entries_resp(Node(2), leader::AppendEntriesRes::Success { match_index })
+            .unwrap();
 
         // s1: [1][]
         // s2: [][1]
@@ -136,11 +137,7 @@ mod tests {
         // s1: [1][]
         // s2: [1][]
 
-        s1.append_entries_resp(
-            1,
-            Node(2),
-            leader::AppendEntriesRes::Success { match_index },
-        )
-        .unwrap();
+        s1.append_entries_resp(Node(2), leader::AppendEntriesRes::Success { match_index })
+            .unwrap();
     }
 }
