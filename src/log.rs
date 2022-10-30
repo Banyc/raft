@@ -51,6 +51,13 @@ impl Log {
         self.uncommitted.extend(new_entries);
     }
 
+    /// - Returns the index of the new entry
+    #[must_use]
+    pub fn push(&mut self, new_entry: Term) -> usize {
+        self.uncommitted.push_back(new_entry);
+        self.len() - 1
+    }
+
     #[must_use]
     pub fn try_commit(&mut self, index: usize) -> bool {
         if index < self.committed.len() {

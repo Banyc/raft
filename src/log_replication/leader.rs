@@ -74,20 +74,29 @@ impl Leader {
         // Adjust the information of what entries the follower lacks
         match res {
             AppendEntriesRes::Success { match_index } => {
-                if match_index >= self.log.len() {
-                    return Err(AppendEntriesError::InvalidMatchIndex);
+                if let Some(match_index) = match_index {
+                    if match_index >= self.log.len() {
+                        return Err(AppendEntriesError::InvalidMatchIndex);
+                    }
                 }
-                if let Some(existing_match_index) = follower_log.match_index {
-                    if match_index < existing_match_index {
+                match (match_index, follower_log.match_index) {
+                    (None, Some(_)) => {
                         return Err(AppendEntriesError::MatchIndexTooSmall);
                     }
+                    (Some(peers_), Some(mine)) if peers_ < mine => {
+                        return Err(AppendEntriesError::MatchIndexTooSmall);
+                    }
+                    _ => (),
                 }
 
                 // Mark all the entries up to the match index as replicated
-                follower_log.match_index = Some(match_index);
+                follower_log.match_index = match_index;
 
                 // To send the rest of the entries in the future
-                follower_log.next_index = match_index + 1;
+                follower_log.next_index = match match_index {
+                    Some(match_index) => match_index + 1,
+                    None => 0,
+                };
             }
             AppendEntriesRes::Failure { new_next_index } => {
                 if new_next_index >= self.log.len() {
@@ -137,6 +146,10 @@ impl Leader {
     pub fn log(&self) -> &Log {
         &self.log
     }
+
+    pub fn log_push(&mut self, entry: Term) -> usize {
+        self.log.push(entry)
+    }
 }
 
 struct FollowerLog {
@@ -153,8 +166,37 @@ pub struct AppendEntriesReq {
     pub commit_index: Option<usize>,
 }
 
+impl AppendEntriesReq {
+    pub fn match_index_on_success(&self) -> Option<usize> {
+        match &self.prev_entry {
+            Some(entry) => Some(entry.index + self.new_entries.len()),
+            None => {
+                if self.new_entries.len() == 0 {
+                    None
+                } else {
+                    Some(self.new_entries.len() - 1)
+                }
+            }
+        }
+    }
+
+    pub fn next_index_on_failure(&self) -> usize {
+        match &self.prev_entry {
+            Some(entry) => {
+                if entry.index == 0 {
+                    0
+                } else {
+                    entry.index - 1
+                }
+            }
+            None => 0,
+        }
+    }
+}
+
+#[derive(Debug)]
 pub enum AppendEntriesRes {
-    Success { match_index: usize },
+    Success { match_index: Option<usize> },
     Failure { new_next_index: usize },
 }
 
@@ -224,7 +266,13 @@ mod tests {
         // new_entries = [1]
 
         leader
-            .append_entries_resp(1, Node(1), AppendEntriesRes::Success { match_index: 0 })
+            .append_entries_resp(
+                1,
+                Node(1),
+                AppendEntriesRes::Success {
+                    match_index: Some(0),
+                },
+            )
             .unwrap();
         assert_eq!(leader.log().commit_index(), Some(0));
     }
