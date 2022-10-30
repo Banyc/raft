@@ -24,7 +24,11 @@ impl Follower {
         commit_index: Option<usize>,
     ) -> Result<bool, ReceiveAppendReqError> {
         if let Some(commit_index) = commit_index {
-            if self.log.len() <= commit_index {
+            let base_index = match &prev_entry {
+                Some(prev) => prev.index + 1,
+                None => 0,
+            };
+            if base_index + new_entries.len() < commit_index {
                 return Err(ReceiveAppendReqError::CommitIndexTooLarge);
             }
         }
@@ -102,7 +106,7 @@ impl Follower {
     fn commit(&mut self, index: usize) -> Result<(), CommitError> {
         match self.log.try_commit(index) {
             true => Ok(()),
-            false => Err(CommitError::LogTooShort),
+            false => Err(CommitError::CommitIndexTooLarge),
         }
     }
 
@@ -132,7 +136,7 @@ pub enum AppendError {
 
 #[derive(Debug)]
 pub enum CommitError {
-    LogTooShort,
+    CommitIndexTooLarge,
 }
 
 #[cfg(test)]
