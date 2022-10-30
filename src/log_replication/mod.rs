@@ -33,16 +33,20 @@ mod tests {
         assert_eq!(req.new_entries, vec![]);
         assert_eq!(req.commit_index, None);
 
-        s2.append(req.new_entries.into(), req.prev_entry).unwrap();
+        let match_index = req.match_index_on_success();
 
+        assert_eq!(match_index, None);
+
+        let success = s2
+            .receive_append_req(req.new_entries, req.prev_entry, req.commit_index)
+            .unwrap();
+
+        assert!(success);
         assert_eq!(s2.log().committed().len(), 0);
         assert_eq!(s2.log().uncommitted().len(), 0);
 
-        s1.append_entries_resp(
-            Node(2),
-            leader::AppendEntriesRes::Success { match_index: None },
-        )
-        .unwrap();
+        s1.receive_append_resp(Node(2), leader::AppendEntriesRes::Success { match_index })
+            .unwrap();
     }
 
     #[test]
@@ -59,21 +63,24 @@ mod tests {
 
         let req = s1.emit(Node(2)).unwrap();
 
-        let match_index = req.match_index_on_success();
-
         assert_eq!(req.prev_entry, None);
         assert_eq!(req.new_entries, vec![1]);
         assert_eq!(req.commit_index, None);
 
-        s2.append(req.new_entries.into(), req.prev_entry).unwrap();
+        let match_index = req.match_index_on_success();
 
+        let success = s2
+            .receive_append_req(req.new_entries, req.prev_entry, req.commit_index)
+            .unwrap();
+
+        assert!(success);
         assert_eq!(s2.log().committed().len(), 0);
         assert_eq!(s2.log().uncommitted().len(), 1);
 
         // s1: [][1]
         // s2: [][1]
 
-        s1.append_entries_resp(Node(2), leader::AppendEntriesRes::Success { match_index })
+        s1.receive_append_resp(Node(2), leader::AppendEntriesRes::Success { match_index })
             .unwrap();
 
         // s1: [1][]
@@ -84,23 +91,24 @@ mod tests {
 
         let req = s1.emit(Node(2)).unwrap();
 
-        let match_index = req.match_index_on_success();
-
         assert_eq!(req.prev_entry, Some(EntryMeta { index: 0, term: 1 }));
         assert_eq!(req.new_entries, vec![]);
         assert_eq!(req.commit_index, Some(0));
 
-        s2.append(req.new_entries.into(), req.prev_entry).unwrap();
+        let match_index = req.match_index_on_success();
 
-        s2.commit(req.commit_index.unwrap()).unwrap();
+        let success = s2
+            .receive_append_req(req.new_entries, req.prev_entry, req.commit_index)
+            .unwrap();
 
+        assert!(success);
         assert_eq!(s2.log().committed().len(), 1);
         assert_eq!(s2.log().uncommitted().len(), 0);
 
         // s1: [1][]
         // s2: [1][]
 
-        s1.append_entries_resp(Node(2), leader::AppendEntriesRes::Success { match_index })
+        s1.receive_append_resp(Node(2), leader::AppendEntriesRes::Success { match_index })
             .unwrap();
     }
 }

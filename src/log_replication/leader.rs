@@ -77,7 +77,7 @@ impl Leader {
     /// - Goal: a feedback to adjust:
     ///   - the entry commit when some entries have replicated in the majority of nodes
     ///   - what entries the followers lack
-    pub fn append_entries_resp(
+    pub fn receive_append_resp(
         &mut self,
         from: Node,
         res: AppendEntriesRes,
@@ -282,7 +282,7 @@ mod tests {
         // new_entries = []
 
         leader
-            .append_entries_resp(Node(1), AppendEntriesRes::Success { match_index: None })
+            .receive_append_resp(Node(1), AppendEntriesRes::Success { match_index: None })
             .unwrap();
         assert_eq!(leader.log().commit_index(), None);
     }
@@ -304,7 +304,7 @@ mod tests {
         // new_entries = [1]
 
         leader
-            .append_entries_resp(
+            .receive_append_resp(
                 Node(1),
                 AppendEntriesRes::Success {
                     match_index: Some(0),
@@ -327,7 +327,7 @@ mod tests {
         );
 
         leader
-            .append_entries_resp(Node(1), AppendEntriesRes::Failure { new_next_index: 0 })
+            .receive_append_resp(Node(1), AppendEntriesRes::Failure { new_next_index: 0 })
             .unwrap();
 
         assert_eq!(leader.log().commit_index(), None);

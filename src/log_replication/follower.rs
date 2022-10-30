@@ -17,7 +17,37 @@ impl Follower {
         Follower { log }
     }
 
-    pub fn append(
+    pub fn receive_append_req(
+        &mut self,
+        new_entries: Vec<Term>,
+        prev_entry: Option<EntryMeta>,
+        commit_index: Option<usize>,
+    ) -> Result<bool, ReceiveAppendReqError> {
+        if let Some(commit_index) = commit_index {
+            if self.log.len() <= commit_index {
+                return Err(ReceiveAppendReqError::CommitIndexTooLarge);
+            }
+        }
+
+        let success = match self.append(new_entries.into(), prev_entry) {
+            Ok(_) => true,
+            Err(e) => match e {
+                AppendError::NewEntriesTooFarAhead => false,
+                AppendError::CommittedLogMismatch => {
+                    return Err(ReceiveAppendReqError::CommittedLogMismatch)
+                }
+            },
+        };
+
+        if let Some(commit_index) = commit_index {
+            // SAFETY: We checked that the commit index is not too large above.
+            self.commit(commit_index).unwrap();
+        }
+
+        Ok(success)
+    }
+
+    fn append(
         &mut self,
         mut new_entries: VecDeque<Term>,
         prev_entry: Option<EntryMeta>,
@@ -69,7 +99,7 @@ impl Follower {
         Ok(())
     }
 
-    pub fn commit(&mut self, index: usize) -> Result<(), CommitError> {
+    fn commit(&mut self, index: usize) -> Result<(), CommitError> {
         match self.log.try_commit(index) {
             true => Ok(()),
             false => Err(CommitError::LogTooShort),
@@ -83,6 +113,12 @@ impl Follower {
     pub fn log(&self) -> &Log {
         &self.log
     }
+}
+
+#[derive(Debug)]
+pub enum ReceiveAppendReqError {
+    CommittedLogMismatch,
+    CommitIndexTooLarge,
 }
 
 #[derive(Debug, PartialEq, Eq)]
