@@ -17,22 +17,21 @@ impl Follower {
         Follower { log }
     }
 
-    #[must_use]
     pub fn append(
         &mut self,
         mut new_entries: VecDeque<Term>,
         prev_entry: Option<EntryMeta>,
-    ) -> AppendRes {
+    ) -> Result<(), AppendError> {
         let mut start = match prev_entry {
             Some(prev) => {
                 let (term, state) = match self.log.entry(prev.index) {
                     Some(v) => v,
-                    None => return AppendRes::NewEntriesTooFarAhead,
+                    None => return Err(AppendError::NewEntriesTooFarAhead),
                 };
                 if term != prev.term {
                     match state {
-                        EntryState::Committed => return AppendRes::CommittedLogMismatch,
-                        EntryState::Uncommitted => return AppendRes::NewEntriesTooFarAhead,
+                        EntryState::Committed => return Err(AppendError::CommittedLogMismatch),
+                        EntryState::Uncommitted => return Err(AppendError::NewEntriesTooFarAhead),
                     }
                 }
                 prev.index + 1
@@ -50,7 +49,7 @@ impl Follower {
                 }
                 // Overwrite existing entries
                 match state {
-                    EntryState::Committed => return AppendRes::CommittedLogMismatch,
+                    EntryState::Committed => return Err(AppendError::CommittedLogMismatch),
                     EntryState::Uncommitted => {
                         // We need to truncate the log
                         self.log.remove_uncommitted_from(start);
@@ -67,7 +66,7 @@ impl Follower {
             self.log.append(new_entries.into_iter());
         }
 
-        AppendRes::Success
+        Ok(())
     }
 
     pub fn commit(&mut self, index: usize) -> Result<(), CommitError> {
@@ -87,12 +86,12 @@ impl Follower {
 }
 
 #[derive(Debug, PartialEq, Eq)]
-pub enum AppendRes {
-    CommittedLogMismatch,
-    Success,
-
-    // - Respond with success = false
+pub enum AppendError {
+    /// - Respond with success = false
     NewEntriesTooFarAhead,
+
+    /// - Panic
+    CommittedLogMismatch,
 }
 
 #[derive(Debug)]
@@ -109,8 +108,7 @@ mod tests {
     #[test]
     fn append_none_prev_to_empty_log() {
         let mut follower = Follower::new(Log::new());
-        let res = follower.append(vec![0].into(), None);
-        assert_eq!(res, AppendRes::Success);
+        follower.append(vec![0].into(), None).unwrap();
         assert_eq!(follower.log.uncommitted().len(), 1);
     }
 
@@ -118,11 +116,9 @@ mod tests {
     fn append_none_prev_to_uncommitted_log() {
         let mut follower = Follower::new(Log::new());
 
-        let res = follower.append(vec![0].into(), None);
-        assert_eq!(res, AppendRes::Success);
+        follower.append(vec![0].into(), None).unwrap();
 
-        let res = follower.append(vec![0].into(), None);
-        assert_eq!(res, AppendRes::Success);
+        follower.append(vec![0].into(), None).unwrap();
         assert_eq!(follower.log.uncommitted().len(), 1);
     }
 
@@ -130,24 +126,22 @@ mod tests {
     fn append_none_prev_to_committed_log() {
         let mut follower = Follower::new(Log::new());
 
-        let res = follower.append(vec![0].into(), None);
-        assert_eq!(res, AppendRes::Success);
+        follower.append(vec![0].into(), None).unwrap();
 
         follower.commit(0).unwrap();
 
-        let res = follower.append(vec![0].into(), None);
-        assert_eq!(res, AppendRes::Success);
+        follower.append(vec![0].into(), None).unwrap();
         assert_eq!(follower.log.committed().len(), 1);
 
         let res = follower.append(vec![1].into(), None);
-        assert_eq!(res, AppendRes::CommittedLogMismatch);
+        assert_eq!(res, Err(AppendError::CommittedLogMismatch));
     }
 
     #[test]
     fn append_some_prev_to_empty_log() {
         let mut follower = Follower::new(Log::new());
         let res = follower.append(vec![0].into(), Some(EntryMeta { index: 0, term: 0 }));
-        assert_eq!(res, AppendRes::NewEntriesTooFarAhead);
+        assert_eq!(res, Err(AppendError::NewEntriesTooFarAhead));
         assert_eq!(follower.log.uncommitted().len(), 0);
     }
 
@@ -155,11 +149,11 @@ mod tests {
     fn append_some_prev_to_uncommitted_log() {
         let mut follower = Follower::new(Log::new());
 
-        let res = follower.append(vec![0].into(), None);
-        assert_eq!(res, AppendRes::Success);
+        follower.append(vec![0].into(), None).unwrap();
 
-        let res = follower.append(vec![0].into(), Some(EntryMeta { index: 0, term: 0 }));
-        assert_eq!(res, AppendRes::Success);
+        follower
+            .append(vec![0].into(), Some(EntryMeta { index: 0, term: 0 }))
+            .unwrap();
         assert_eq!(follower.log.uncommitted().len(), 2);
     }
 
@@ -169,8 +163,7 @@ mod tests {
 
         // [][]
 
-        let res = follower.append(vec![0].into(), None);
-        assert_eq!(res, AppendRes::Success);
+        follower.append(vec![0].into(), None).unwrap();
 
         // [][0]
 
@@ -178,22 +171,22 @@ mod tests {
 
         // [0][]
 
-        let res = follower.append(vec![0].into(), Some(EntryMeta { index: 0, term: 0 }));
-        assert_eq!(res, AppendRes::Success);
+        follower
+            .append(vec![0].into(), Some(EntryMeta { index: 0, term: 0 }))
+            .unwrap();
         assert_eq!(follower.log.committed().len(), 1);
 
         // [0][0]
 
         let res = follower.append(vec![1].into(), Some(EntryMeta { index: 0, term: 1 }));
-        assert_eq!(res, AppendRes::CommittedLogMismatch);
+        assert_eq!(res, Err(AppendError::CommittedLogMismatch));
     }
 
     #[test]
     fn append_some_prev_wrong_term() {
         let mut follower = Follower::new(Log::new());
 
-        let res = follower.append(vec![0].into(), None);
-        assert_eq!(res, AppendRes::Success);
+        follower.append(vec![0].into(), None).unwrap();
 
         // [][0]
 
@@ -201,7 +194,7 @@ mod tests {
 
         // [][0]
 
-        assert_eq!(res, AppendRes::NewEntriesTooFarAhead);
+        assert_eq!(res, Err(AppendError::NewEntriesTooFarAhead));
         assert_eq!(follower.log.uncommitted().len(), 1);
     }
 
@@ -209,16 +202,14 @@ mod tests {
     fn append_overwrite() {
         let mut follower = Follower::new(Log::new());
 
-        let res = follower.append(vec![0].into(), None);
-        assert_eq!(res, AppendRes::Success);
+        follower.append(vec![0].into(), None).unwrap();
 
         // [][0]
 
-        let res = follower.append(vec![1].into(), None);
+        follower.append(vec![1].into(), None).unwrap();
 
         // [][1]
 
-        assert_eq!(res, AppendRes::Success);
         assert_eq!(follower.log.uncommitted().len(), 1);
     }
 }

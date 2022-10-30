@@ -64,9 +64,8 @@ mod tests {
         assert_eq!(req.new_entries, vec![]);
         assert_eq!(req.commit_index, None);
 
-        let res = s2.append(req.new_entries.into(), req.prev_entry);
+        s2.append(req.new_entries.into(), req.prev_entry).unwrap();
 
-        assert_eq!(res, follower::AppendRes::Success);
         assert_eq!(s2.log().committed().len(), 0);
         assert_eq!(s2.log().uncommitted().len(), 0);
 
@@ -98,9 +97,8 @@ mod tests {
         assert_eq!(req.new_entries, vec![1]);
         assert_eq!(req.commit_index, None);
 
-        let res = s2.append(req.new_entries.into(), req.prev_entry);
+        s2.append(req.new_entries.into(), req.prev_entry).unwrap();
 
-        assert_eq!(res, follower::AppendRes::Success);
         assert_eq!(s2.log().committed().len(), 0);
         assert_eq!(s2.log().uncommitted().len(), 1);
 
@@ -128,11 +126,10 @@ mod tests {
         assert_eq!(req.new_entries, vec![]);
         assert_eq!(req.commit_index, Some(0));
 
-        let res = s2.append(req.new_entries.into(), req.prev_entry);
+        s2.append(req.new_entries.into(), req.prev_entry).unwrap();
 
         s2.commit(req.commit_index.unwrap()).unwrap();
 
-        assert_eq!(res, follower::AppendRes::Success);
         assert_eq!(s2.log().committed().len(), 1);
         assert_eq!(s2.log().uncommitted().len(), 0);
 
