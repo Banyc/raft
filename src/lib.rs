@@ -1,6 +1,7 @@
 pub mod election;
 pub mod log;
 pub mod log_replication;
+pub mod raft;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Node(pub u64);
