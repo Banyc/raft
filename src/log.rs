@@ -104,6 +104,15 @@ impl Log {
             Some(self.committed.len() - 1)
         }
     }
+
+    #[must_use]
+    pub fn last_entry(&self) -> Option<(Term, EntryState)> {
+        if self.len() == 0 {
+            None
+        } else {
+            self.entry(self.len() - 1)
+        }
+    }
 }
 
 pub type Command = Vec<u8>;
