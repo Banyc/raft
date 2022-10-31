@@ -5,7 +5,7 @@ pub use self::{follower::Follower, leader::Leader};
 pub mod follower;
 pub mod leader;
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct EntryMeta {
     pub index: usize,
     pub term: Term,
