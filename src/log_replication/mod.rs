@@ -38,14 +38,14 @@ mod tests {
         assert_eq!(match_index, None);
 
         let success = s2
-            .receive_append_req(req.new_entries, req.prev_entry, req.commit_index)
+            .receive_append_entries_req(req.new_entries, req.prev_entry, req.commit_index)
             .unwrap();
 
         assert!(success);
         assert_eq!(s2.log().committed().len(), 0);
         assert_eq!(s2.log().uncommitted().len(), 0);
 
-        s1.receive_append_resp(Node(2), leader::AppendEntriesRes::Success { match_index })
+        s1.receive_append_entries_resp(Node(2), leader::AppendEntriesRes::Success { match_index })
             .unwrap();
     }
 
@@ -70,7 +70,7 @@ mod tests {
         let match_index = req.match_index_on_success();
 
         let success = s2
-            .receive_append_req(req.new_entries, req.prev_entry, req.commit_index)
+            .receive_append_entries_req(req.new_entries, req.prev_entry, req.commit_index)
             .unwrap();
 
         assert!(success);
@@ -80,7 +80,7 @@ mod tests {
         // s1: [][1]
         // s2: [][1]
 
-        s1.receive_append_resp(Node(2), leader::AppendEntriesRes::Success { match_index })
+        s1.receive_append_entries_resp(Node(2), leader::AppendEntriesRes::Success { match_index })
             .unwrap();
 
         // s1: [1][]
@@ -98,7 +98,7 @@ mod tests {
         let match_index = req.match_index_on_success();
 
         let success = s2
-            .receive_append_req(req.new_entries, req.prev_entry, req.commit_index)
+            .receive_append_entries_req(req.new_entries, req.prev_entry, req.commit_index)
             .unwrap();
 
         assert!(success);
@@ -108,7 +108,7 @@ mod tests {
         // s1: [1][]
         // s2: [1][]
 
-        s1.receive_append_resp(Node(2), leader::AppendEntriesRes::Success { match_index })
+        s1.receive_append_entries_resp(Node(2), leader::AppendEntriesRes::Success { match_index })
             .unwrap();
     }
 }

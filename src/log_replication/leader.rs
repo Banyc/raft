@@ -76,30 +76,30 @@ impl Leader {
     /// - Goal: a feedback to adjust:
     ///   - the entry commit when some entries have replicated in the majority of nodes
     ///   - what entries the followers lack
-    pub fn receive_append_resp(
+    pub fn receive_append_entries_resp(
         &mut self,
         from: Node,
         res: AppendEntriesRes,
-    ) -> Result<(), AppendEntriesError> {
+    ) -> Result<(), ReceiveAppendEntriesRespError> {
         let follower_log = self
             .follower_logs
             .get_mut(&from)
-            .ok_or(AppendEntriesError::UnknownNode)?;
+            .ok_or(ReceiveAppendEntriesRespError::UnknownNode)?;
 
         // Adjust the information of what entries the follower lacks
         match res {
             AppendEntriesRes::Success { match_index } => {
                 if let Some(match_index) = match_index {
                     if match_index >= self.log.len() {
-                        return Err(AppendEntriesError::InvalidMatchIndex);
+                        return Err(ReceiveAppendEntriesRespError::InvalidMatchIndex);
                     }
                 }
                 match (match_index, follower_log.match_index) {
                     (None, Some(_)) => {
-                        return Err(AppendEntriesError::MatchIndexTooSmall);
+                        return Err(ReceiveAppendEntriesRespError::MatchIndexTooSmall);
                     }
                     (Some(peers_), Some(mine)) if peers_ < mine => {
-                        return Err(AppendEntriesError::MatchIndexTooSmall);
+                        return Err(ReceiveAppendEntriesRespError::MatchIndexTooSmall);
                     }
                     _ => (),
                 }
@@ -115,10 +115,10 @@ impl Leader {
             }
             AppendEntriesRes::Failure { new_next_index } => {
                 if new_next_index >= self.log.len() {
-                    return Err(AppendEntriesError::InvalidNextIndex);
+                    return Err(ReceiveAppendEntriesRespError::InvalidNextIndex);
                 }
                 if follower_log.next_index <= new_next_index {
-                    return Err(AppendEntriesError::NextIndexTooLarge);
+                    return Err(ReceiveAppendEntriesRespError::NextIndexTooLarge);
                 }
 
                 // The follower lacks even more entries than anticipated before
@@ -221,7 +221,7 @@ pub enum EmitError {
 }
 
 #[derive(Debug)]
-pub enum AppendEntriesError {
+pub enum ReceiveAppendEntriesRespError {
     UnknownNode,
     InvalidMatchIndex,
 
@@ -281,7 +281,7 @@ mod tests {
         // new_entries = []
 
         leader
-            .receive_append_resp(Node(1), AppendEntriesRes::Success { match_index: None })
+            .receive_append_entries_resp(Node(1), AppendEntriesRes::Success { match_index: None })
             .unwrap();
         assert_eq!(leader.log().commit_index(), None);
     }
@@ -303,7 +303,7 @@ mod tests {
         // new_entries = [1]
 
         leader
-            .receive_append_resp(
+            .receive_append_entries_resp(
                 Node(1),
                 AppendEntriesRes::Success {
                     match_index: Some(0),
@@ -326,7 +326,7 @@ mod tests {
         );
 
         leader
-            .receive_append_resp(Node(1), AppendEntriesRes::Failure { new_next_index: 0 })
+            .receive_append_entries_resp(Node(1), AppendEntriesRes::Failure { new_next_index: 0 })
             .unwrap();
 
         assert_eq!(leader.log().commit_index(), None);

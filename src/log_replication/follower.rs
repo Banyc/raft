@@ -17,19 +17,19 @@ impl Follower {
         Follower { log }
     }
 
-    pub fn receive_append_req(
+    pub fn receive_append_entries_req(
         &mut self,
         new_entries: Vec<Term>,
         prev_entry: Option<EntryMeta>,
         commit_index: Option<usize>,
-    ) -> Result<bool, ReceiveAppendReqError> {
+    ) -> Result<bool, ReceiveAppendEntriesReqError> {
         if let Some(commit_index) = commit_index {
             let base_index = match &prev_entry {
                 Some(prev) => prev.index + 1,
                 None => 0,
             };
             if base_index + new_entries.len() < commit_index {
-                return Err(ReceiveAppendReqError::CommitIndexTooLarge);
+                return Err(ReceiveAppendEntriesReqError::CommitIndexTooLarge);
             }
         }
 
@@ -38,7 +38,7 @@ impl Follower {
             Err(e) => match e {
                 AppendError::NewEntriesTooFarAhead => false,
                 AppendError::CommittedLogMismatch => {
-                    return Err(ReceiveAppendReqError::CommittedLogMismatch)
+                    return Err(ReceiveAppendEntriesReqError::CommittedLogMismatch)
                 }
             },
         };
@@ -120,7 +120,7 @@ impl Follower {
 }
 
 #[derive(Debug)]
-pub enum ReceiveAppendReqError {
+pub enum ReceiveAppendEntriesReqError {
     CommittedLogMismatch,
     CommitIndexTooLarge,
 }
