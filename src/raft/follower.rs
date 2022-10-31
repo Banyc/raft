@@ -35,7 +35,7 @@ impl Follower {
 
         let (res, vote_granted) = self
             .election
-            .try_upgrade_term_and_receive_vote_req(from, term, valid_log);
+            .try_upgrade_term_and_receive_vote_req(from, term, !valid_log);
 
         let res = match res {
             election::follower::TryUpgradeTermAndReceiveVoteReqRes::TermUpgraded(election) => {
