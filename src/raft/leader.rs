@@ -88,11 +88,41 @@ impl Leader {
     }
 
     pub fn receive_append_entries_resp(
-        &mut self,
+        self,
         from: Node,
+        term: Term,
         res: log_replication::leader::AppendEntriesRes,
-    ) -> Result<(), log_replication::leader::ReceiveAppendEntriesRespError> {
-        self.log_replication.receive_append_entries_resp(from, res)
+    ) -> Result<ReceiveAppendEntriesRespRes, log_replication::leader::ReceiveAppendEntriesRespError>
+    {
+        let election = match self.election.try_upgrade_term(term) {
+            election::leader::TryUpgradeTermRes::Upgraded(election) => {
+                let follower = Follower::new(
+                    self.peers,
+                    *election.facts(),
+                    election.term(),
+                    self.log_replication.into_log(),
+                );
+
+                return Ok(ReceiveAppendEntriesRespRes::TermUpgraded(follower));
+            }
+            election::leader::TryUpgradeTermRes::NotUpgraded(v) => v,
+        };
+
+        let mut leader = Self {
+            peers: self.peers,
+            election,
+            log_replication: self.log_replication,
+        };
+
+        leader
+            .log_replication
+            .receive_append_entries_resp(from, res)?;
+
+        Ok(ReceiveAppendEntriesRespRes::NotUpgraded(leader))
+    }
+
+    pub fn push(&mut self) -> usize {
+        self.log_replication.log_push(self.election.term())
     }
 }
 
@@ -104,6 +134,13 @@ pub struct AppendEntriesReq {
 }
 
 pub enum ReceiveVoteReqRes {
+    // - The follower should reset its election timer.
+    TermUpgraded(Follower),
+
+    NotUpgraded(Leader),
+}
+
+pub enum ReceiveAppendEntriesRespRes {
     // - The follower should reset its election timer.
     TermUpgraded(Follower),
 
