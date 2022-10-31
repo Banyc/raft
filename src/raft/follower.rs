@@ -105,7 +105,7 @@ impl Follower {
     }
 
     #[must_use]
-    pub fn receive_append_entries_req_(
+    fn receive_append_entries_req_(
         mut self,
         term: Term,
         new_entries: Vec<Term>,
