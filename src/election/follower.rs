@@ -40,14 +40,14 @@ impl Follower {
     }
 
     #[must_use]
-    fn receive_vote_request(
+    fn receive_vote_req(
         &mut self,
         from: Node,
         term: Term,
         disqualified: bool,
-    ) -> Result<bool, ReceiveVoteRequestError> {
+    ) -> Result<bool, ReceiveVoteReqError> {
         if self.term < term {
-            return Err(ReceiveVoteRequestError::UpgradeTerm);
+            return Err(ReceiveVoteReqError::UpgradeTerm);
         }
 
         if term < self.term {
@@ -79,12 +79,12 @@ impl Follower {
     }
 
     #[must_use]
-    pub fn try_upgrade_term_and_receive_vote_request(
+    pub fn try_upgrade_term_and_receive_vote_req(
         self,
         from: Node,
         term: Term,
         disqualified: bool,
-    ) -> (TryUpgradeTermAndReceiveVoteRequestRes, bool) {
+    ) -> (TryUpgradeTermAndReceiveVoteReqRes, bool) {
         let (mut this, term_upgraded) = match self.try_upgrade_term(term) {
             TryUpgradeTermRes::Upgraded(follower) => (follower, true),
             TryUpgradeTermRes::SameTermNotUpgraded(follower) => (follower, false),
@@ -92,15 +92,15 @@ impl Follower {
         };
 
         // SAFETY: term is up-to-date at this point
-        let vote_granted = this.receive_vote_request(from, term, disqualified).unwrap();
+        let vote_granted = this.receive_vote_req(from, term, disqualified).unwrap();
 
         match term_upgraded {
             true => (
-                TryUpgradeTermAndReceiveVoteRequestRes::TermUpgraded(this),
+                TryUpgradeTermAndReceiveVoteReqRes::TermUpgraded(this),
                 vote_granted,
             ),
             false => (
-                TryUpgradeTermAndReceiveVoteRequestRes::NotUpgraded(this),
+                TryUpgradeTermAndReceiveVoteReqRes::NotUpgraded(this),
                 vote_granted,
             ),
         }
@@ -127,11 +127,11 @@ pub enum TryUpgradeTermRes {
 }
 
 #[derive(Debug)]
-pub enum ReceiveVoteRequestError {
+pub enum ReceiveVoteReqError {
     UpgradeTerm,
 }
 
-pub enum TryUpgradeTermAndReceiveVoteRequestRes {
+pub enum TryUpgradeTermAndReceiveVoteReqRes {
     /// - The follower should reset its election timer
     TermUpgraded(Follower),
 

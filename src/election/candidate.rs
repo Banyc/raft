@@ -49,18 +49,18 @@ impl Candidate {
         Candidate::new(self.facts, self.term + 1)
     }
 
-    fn receive_vote(
+    fn receive_vote_resp(
         mut self,
         from: Node,
         term: Term,
         vote_granted: bool,
-    ) -> Result<ReceiveVoteRes, ReceiveVoteError> {
+    ) -> Result<ReceiveVoteRespRes, ReceiveVoteError> {
         if self.term < term {
             return Err(ReceiveVoteError::UpgradeTerm);
         }
 
         if term < self.term {
-            return Ok(ReceiveVoteRes::NotUpgraded(self));
+            return Ok(ReceiveVoteRespRes::NotUpgraded(self));
         }
 
         if vote_granted {
@@ -72,14 +72,14 @@ impl Candidate {
                 // become leader
                 let leader = Leader::new(self.facts, self.term);
 
-                Ok(ReceiveVoteRes::Upgraded(leader))
+                Ok(ReceiveVoteRespRes::Upgraded(leader))
             } else {
                 // keep waiting for more votes
-                Ok(ReceiveVoteRes::NotUpgraded(self))
+                Ok(ReceiveVoteRespRes::NotUpgraded(self))
             }
         } else {
             // keep waiting for more votes
-            Ok(ReceiveVoteRes::NotUpgraded(self))
+            Ok(ReceiveVoteRespRes::NotUpgraded(self))
         }
     }
 
@@ -99,27 +99,29 @@ impl Candidate {
     }
 
     #[must_use]
-    pub fn try_upgrade_term_and_receive_vote(
+    pub fn try_upgrade_term_and_receive_vote_resp(
         self,
         from: Node,
         term: Term,
         vote_granted: bool,
-    ) -> TryUpgradeTermAndReceiveVoteRes {
+    ) -> TryUpgradeTermAndReceiveVoteRespRes {
         let this = match self.try_upgrade_term(term) {
             TryUpgradeTermRes::Upgraded(follower) => {
-                return TryUpgradeTermAndReceiveVoteRes::TermUpgraded(follower);
+                return TryUpgradeTermAndReceiveVoteRespRes::TermUpgraded(follower);
             }
             TryUpgradeTermRes::SameTermNotUpgraded(candidate) => candidate,
             TryUpgradeTermRes::StaleTermNotUpgraded(candidate) => {
-                return TryUpgradeTermAndReceiveVoteRes::StaleTermNotUpgraded(candidate)
+                return TryUpgradeTermAndReceiveVoteRespRes::StaleTermNotUpgraded(candidate)
             }
         };
 
         // SAFETY: term is up-to-date at this point
-        match this.receive_vote(from, term, vote_granted).unwrap() {
-            ReceiveVoteRes::Upgraded(leader) => TryUpgradeTermAndReceiveVoteRes::Elected(leader),
-            ReceiveVoteRes::NotUpgraded(candidate) => {
-                TryUpgradeTermAndReceiveVoteRes::NotElectedYet(candidate)
+        match this.receive_vote_resp(from, term, vote_granted).unwrap() {
+            ReceiveVoteRespRes::Upgraded(leader) => {
+                TryUpgradeTermAndReceiveVoteRespRes::Elected(leader)
+            }
+            ReceiveVoteRespRes::NotUpgraded(candidate) => {
+                TryUpgradeTermAndReceiveVoteRespRes::NotElectedYet(candidate)
             }
         }
     }
@@ -177,7 +179,7 @@ pub enum ReceiveVoteError {
     UpgradeTerm,
 }
 
-pub enum ReceiveVoteRes {
+pub enum ReceiveVoteRespRes {
     Upgraded(Leader),
     NotUpgraded(Candidate),
 }
@@ -192,7 +194,7 @@ pub enum ReceivePingRes {
     StaleTermNotUpgraded(Candidate),
 }
 
-pub enum TryUpgradeTermAndReceiveVoteRes {
+pub enum TryUpgradeTermAndReceiveVoteRespRes {
     /// - The follower should reset its election timer
     TermUpgraded(Follower),
 
