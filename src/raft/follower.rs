@@ -5,7 +5,7 @@ use crate::{
     Facts, Node, Term,
 };
 
-use super::{candidate::Candidate, VoteResp};
+use super::{candidate::Candidate, AppendEntriesResp, VoteResp};
 
 pub struct Follower {
     peers: Vec<Node>,
@@ -81,6 +81,31 @@ impl Follower {
 
     #[must_use]
     pub fn receive_append_entries_req(
+        self,
+        term: Term,
+        new_entries: Vec<Term>,
+        prev_entry: Option<EntryMeta>,
+        commit_index: Option<usize>,
+    ) -> (ReceiveAppendEntriesReqRes, AppendEntriesResp) {
+        let (res, success) =
+            self.receive_append_entries_req_(term, new_entries, prev_entry, commit_index);
+
+        let follower = match &res {
+            ReceiveAppendEntriesReqRes::StaleTermNotUpgraded(v) => v,
+            ReceiveAppendEntriesReqRes::LogHandled(v) => v,
+        };
+
+        let resp = AppendEntriesResp {
+            from: follower.election.facts().id,
+            term: follower.election.term(),
+            success,
+        };
+
+        (res, resp)
+    }
+
+    #[must_use]
+    pub fn receive_append_entries_req_(
         mut self,
         term: Term,
         new_entries: Vec<Term>,

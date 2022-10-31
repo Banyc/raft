@@ -8,7 +8,7 @@ use crate::{
 use super::{
     follower::{self, Follower},
     leader::Leader,
-    VoteResp,
+    AppendEntriesResp, VoteResp,
 };
 
 pub struct Candidate {
@@ -148,7 +148,7 @@ impl Candidate {
         new_entries: Vec<Term>,
         prev_entry: Option<EntryMeta>,
         commit_index: Option<usize>,
-    ) -> (ReceiveAppendEntriesReqRes, bool) {
+    ) -> (ReceiveAppendEntriesReqRes, AppendEntriesResp) {
         let election = match self.election.try_upgrade_term_and_receive_ping(term) {
             election::candidate::TryUpgradeTermAndReceivePingRes::TermUpgraded(v) => v,
             election::candidate::TryUpgradeTermAndReceivePingRes::StaleTermNotUpgraded(
@@ -160,9 +160,15 @@ impl Candidate {
                     log_replication: self.log_replication,
                 };
 
+                let resp = AppendEntriesResp {
+                    from: candidate.election.facts().id,
+                    term: candidate.election.term(),
+                    success: false,
+                };
+
                 return (
                     ReceiveAppendEntriesReqRes::StaleTermNotUpgraded(candidate),
-                    false,
+                    resp,
                 );
             }
             election::candidate::TryUpgradeTermAndReceivePingRes::LostElection(v) => v,
@@ -175,7 +181,7 @@ impl Candidate {
             self.log_replication.into_log(),
         );
 
-        let (res, success) =
+        let (res, resp) =
             follower.receive_append_entries_req(term, new_entries, prev_entry, commit_index);
 
         let follower = match res {
@@ -187,7 +193,7 @@ impl Candidate {
 
         (
             ReceiveAppendEntriesReqRes::TermUpgradedOrLostElection(follower),
-            success,
+            resp,
         )
     }
 }
