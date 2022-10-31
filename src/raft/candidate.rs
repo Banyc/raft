@@ -57,7 +57,7 @@ impl Candidate {
                 let follower = Follower::new(
                     self.peers,
                     *election.facts(),
-                    term,
+                    election.term(),
                     self.log_replication.into_log(),
                 );
 
