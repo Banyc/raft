@@ -29,8 +29,10 @@ impl Candidate {
             let follower = Follower::new(self.facts, term);
 
             TryUpgradeTermRes::Upgraded(follower)
+        } else if term < self.term {
+            TryUpgradeTermRes::StaleTermNotUpgraded(self)
         } else {
-            TryUpgradeTermRes::NotUpgraded(self)
+            TryUpgradeTermRes::SameTermNotUpgraded(self)
         }
     }
 
@@ -87,7 +89,7 @@ impl Candidate {
         }
 
         if term < self.term {
-            return Ok(ReceivePingRes::NotUpgraded(self));
+            return Ok(ReceivePingRes::StaleTermNotUpgraded(self));
         }
 
         // become follower
@@ -107,7 +109,10 @@ impl Candidate {
             TryUpgradeTermRes::Upgraded(follower) => {
                 return TryUpgradeTermAndReceiveVoteRes::TermUpgraded(follower);
             }
-            TryUpgradeTermRes::NotUpgraded(candidate) => candidate,
+            TryUpgradeTermRes::SameTermNotUpgraded(candidate) => candidate,
+            TryUpgradeTermRes::StaleTermNotUpgraded(candidate) => {
+                return TryUpgradeTermAndReceiveVoteRes::StaleTermNotUpgraded(candidate)
+            }
         };
 
         // SAFETY: term is up-to-date at this point
@@ -125,7 +130,10 @@ impl Candidate {
             TryUpgradeTermRes::Upgraded(follower) => {
                 return TryUpgradeTermAndReceivePingRes::TermUpgraded(follower);
             }
-            TryUpgradeTermRes::NotUpgraded(candidate) => candidate,
+            TryUpgradeTermRes::SameTermNotUpgraded(candidate) => candidate,
+            TryUpgradeTermRes::StaleTermNotUpgraded(candidate) => {
+                return TryUpgradeTermAndReceivePingRes::StaleTermNotUpgraded(candidate)
+            }
         };
 
         // SAFETY: term is up-to-date at this point
@@ -133,9 +141,9 @@ impl Candidate {
             ReceivePingRes::Upgraded(follower) => {
                 TryUpgradeTermAndReceivePingRes::LostElection(follower)
             }
-            ReceivePingRes::NotUpgraded(candidate) => {
-                TryUpgradeTermAndReceivePingRes::NotUpgraded(candidate)
-            }
+
+            // SAFETY: term is the same at this point
+            ReceivePingRes::StaleTermNotUpgraded(_) => unreachable!(),
         }
     }
 
@@ -153,7 +161,10 @@ pub enum TryUpgradeTermRes {
     Upgraded(Follower),
 
     /// - If receiving vote request, the candidate should not reset its election timer.
-    NotUpgraded(Candidate),
+    StaleTermNotUpgraded(Candidate),
+
+    /// - If receiving vote request, the candidate should not reset its election timer.
+    SameTermNotUpgraded(Candidate),
 }
 
 pub struct RequestVote {
@@ -178,12 +189,15 @@ pub enum ReceivePingError {
 
 pub enum ReceivePingRes {
     Upgraded(Follower),
-    NotUpgraded(Candidate),
+    StaleTermNotUpgraded(Candidate),
 }
 
 pub enum TryUpgradeTermAndReceiveVoteRes {
     /// - The follower should reset its election timer
     TermUpgraded(Follower),
+
+    /// - The candidate should not reset its election timer
+    StaleTermNotUpgraded(Candidate),
 
     /// - The leader should cancel its election timer
     Elected(Leader),
@@ -196,9 +210,9 @@ pub enum TryUpgradeTermAndReceivePingRes {
     /// - The follower should reset its election timer
     TermUpgraded(Follower),
 
+    /// - The candidate should not reset its election timer
+    StaleTermNotUpgraded(Candidate),
+
     /// - The follower should reset its election timer
     LostElection(Follower),
-
-    /// - The candidate should not reset its election timer
-    NotUpgraded(Candidate),
 }
