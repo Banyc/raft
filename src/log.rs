@@ -115,8 +115,6 @@ impl Log {
     }
 }
 
-pub type Command = Vec<u8>;
-
 pub enum EntryState {
     Committed,
     Uncommitted,
