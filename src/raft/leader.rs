@@ -1,4 +1,9 @@
-use crate::{election, log::Log, log_replication, Facts, Node, Term};
+use crate::{
+    election,
+    log::Log,
+    log_replication::{self, EntryMeta},
+    Facts, Node, Term,
+};
 
 use super::follower::{self, Follower};
 
@@ -35,8 +40,7 @@ impl Leader {
         self,
         from: Node,
         term: Term,
-        last_log_index: Option<usize>,
-        last_log_term: Option<Term>,
+        last_log: Option<EntryMeta>,
     ) -> (ReceiveVoteReqRes, bool) {
         let election = match self.election.try_upgrade_term(term) {
             election::leader::TryUpgradeTermRes::Upgraded(election) => {
@@ -47,8 +51,7 @@ impl Leader {
                     self.log_replication.into_log(),
                 );
 
-                let (res, vote_granted) =
-                    follower.receive_vote_req(from, term, last_log_index, last_log_term);
+                let (res, vote_granted) = follower.receive_vote_req(from, term, last_log);
 
                 let follower = match res {
                     // SAFETY: We know that the term is the same as the one we just upgraded to.

@@ -32,16 +32,15 @@ impl Candidate {
 
         let last_log = self.log_replication.log().last_entry();
 
-        let (last_log_index, last_log_term) = match last_log {
-            Some((index, term, _)) => (Some(index), Some(term)),
-            None => (None, None),
+        let last_log = match last_log {
+            Some((index, term, _)) => Some(EntryMeta { index, term }),
+            None => None,
         };
 
         VoteReq {
             term: election_emit.term,
             from: election_emit.from,
-            last_log_index,
-            last_log_term,
+            last_log,
         }
     }
 
@@ -50,8 +49,7 @@ impl Candidate {
         self,
         from: Node,
         term: Term,
-        last_log_index: Option<usize>,
-        last_log_term: Option<Term>,
+        last_log: Option<EntryMeta>,
     ) -> (ReceiveVoteReqRes, bool) {
         let election = match self.election.try_upgrade_term(term) {
             election::candidate::TryUpgradeTermRes::Upgraded(election) => {
@@ -62,8 +60,7 @@ impl Candidate {
                     self.log_replication.into_log(),
                 );
 
-                let (res, vote_granted) =
-                    follower.receive_vote_req(from, term, last_log_index, last_log_term);
+                let (res, vote_granted) = follower.receive_vote_req(from, term, last_log);
 
                 let follower = match res {
                     // SAFETY: We know that the term is the same as the one we just upgraded to.
@@ -191,8 +188,7 @@ impl Candidate {
 pub struct VoteReq {
     pub from: Node,
     pub term: Term,
-    pub last_log_index: Option<usize>,
-    pub last_log_term: Option<Term>,
+    pub last_log: Option<EntryMeta>,
 }
 
 pub enum ReceiveVoteReqRes {

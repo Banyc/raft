@@ -28,10 +28,9 @@ impl Follower {
         self,
         from: Node,
         term: Term,
-        last_log_index: Option<usize>,
-        last_log_term: Option<Term>,
+        last_log: Option<EntryMeta>,
     ) -> (ReceiveVoteReqRes, bool) {
-        let valid_log = self.valid_log(last_log_index, last_log_term);
+        let valid_log = self.valid_log(last_log);
 
         let (res, vote_granted) = self
             .election
@@ -112,13 +111,18 @@ impl Follower {
     }
 
     #[must_use]
-    fn valid_log(&self, last_log_index: Option<usize>, last_log_term: Option<Term>) -> bool {
+    fn valid_log(&self, last_log: Option<EntryMeta>) -> bool {
         // Raft determines which of two logs is more up-to-date
         //   by comparing the index and term of the last entries in the
         //   logs. If the logs have last entries with different terms, then
         //   the log with the later term is more up-to-date. If the logs
         //   end with the same term, then whichever log is longer is
         //   more up-to-date.
+
+        let (last_log_term, last_log_index) = match last_log {
+            Some(last_log) => (Some(last_log.term), Some(last_log.index)),
+            None => (None, None),
+        };
 
         let my_last_log_term = match self.log_replication.log().last_entry() {
             Some((_, v, _)) => Some(v),
