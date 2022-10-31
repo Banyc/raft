@@ -121,7 +121,7 @@ impl Follower {
         //   more up-to-date.
 
         let my_last_log_term = match self.log_replication.log().last_entry() {
-            Some((v, _)) => Some(v),
+            Some((_, v, _)) => Some(v),
             None => None,
         };
 

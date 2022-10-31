@@ -106,11 +106,16 @@ impl Log {
     }
 
     #[must_use]
-    pub fn last_entry(&self) -> Option<(Term, EntryState)> {
+    pub fn last_entry(&self) -> Option<(usize, Term, EntryState)> {
         if self.len() == 0 {
             None
         } else {
-            self.entry(self.len() - 1)
+            let index = self.len() - 1;
+
+            // SAFETY: We just checked that the log is not empty and the index is valid
+            let (term, state) = self.entry(index).unwrap();
+
+            Some((index, term, state))
         }
     }
 }

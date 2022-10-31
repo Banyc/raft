@@ -17,7 +17,7 @@ pub enum NewError {
 
 impl Leader {
     pub fn new(term: Term, log: Log, followers: &[Node]) -> Result<Self, NewError> {
-        if let Some((last_term, _)) = log.last_entry() {
+        if let Some((_, last_term, _)) = log.last_entry() {
             if term < last_term {
                 return Err(NewError::TermTooSmall);
             }
