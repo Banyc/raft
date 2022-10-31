@@ -47,7 +47,7 @@ impl Candidate {
         Candidate::new(self.facts, self.term + 1)
     }
 
-    pub fn receive_vote(
+    fn receive_vote(
         mut self,
         from: Node,
         term: Term,
@@ -81,7 +81,7 @@ impl Candidate {
         }
     }
 
-    pub fn receive_ping(self, term: Term) -> Result<ReceivePingRes, ReceivePingError> {
+    fn receive_ping(self, term: Term) -> Result<ReceivePingRes, ReceivePingError> {
         if self.term < term {
             return Err(ReceivePingError::UpgradeTerm);
         }
@@ -94,6 +94,49 @@ impl Candidate {
         let follower = Follower::new(self.facts, self.term);
 
         Ok(ReceivePingRes::Upgraded(follower))
+    }
+
+    #[must_use]
+    pub fn try_upgrade_term_and_receive_vote(
+        self,
+        from: Node,
+        term: Term,
+        vote_granted: bool,
+    ) -> TryUpgradeTermAndReceiveVoteRes {
+        let this = match self.try_upgrade_term(term) {
+            TryUpgradeTermRes::Upgraded(follower) => {
+                return TryUpgradeTermAndReceiveVoteRes::TermUpgraded(follower);
+            }
+            TryUpgradeTermRes::NotUpgraded(candidate) => candidate,
+        };
+
+        // SAFETY: term is up-to-date at this point
+        match this.receive_vote(from, term, vote_granted).unwrap() {
+            ReceiveVoteRes::Upgraded(leader) => TryUpgradeTermAndReceiveVoteRes::Elected(leader),
+            ReceiveVoteRes::NotUpgraded(candidate) => {
+                TryUpgradeTermAndReceiveVoteRes::NotElected(candidate)
+            }
+        }
+    }
+
+    #[must_use]
+    pub fn try_upgrade_term_and_receive_ping(self, term: Term) -> TryUpgradeTermAndReceivePingRes {
+        let this = match self.try_upgrade_term(term) {
+            TryUpgradeTermRes::Upgraded(follower) => {
+                return TryUpgradeTermAndReceivePingRes::TermUpgraded(follower);
+            }
+            TryUpgradeTermRes::NotUpgraded(candidate) => candidate,
+        };
+
+        // SAFETY: term is up-to-date at this point
+        match this.receive_ping(term).unwrap() {
+            ReceivePingRes::Upgraded(follower) => {
+                TryUpgradeTermAndReceivePingRes::LostElection(follower)
+            }
+            ReceivePingRes::NotUpgraded(candidate) => {
+                TryUpgradeTermAndReceivePingRes::NotUpgraded(candidate)
+            }
+        }
     }
 
     pub fn term(&self) -> Term {
@@ -132,5 +175,17 @@ pub enum ReceivePingError {
 
 pub enum ReceivePingRes {
     Upgraded(Follower),
+    NotUpgraded(Candidate),
+}
+
+pub enum TryUpgradeTermAndReceiveVoteRes {
+    TermUpgraded(Follower),
+    Elected(Leader),
+    NotElected(Candidate),
+}
+
+pub enum TryUpgradeTermAndReceivePingRes {
+    TermUpgraded(Follower),
+    LostElection(Follower),
     NotUpgraded(Candidate),
 }

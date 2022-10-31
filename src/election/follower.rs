@@ -38,7 +38,7 @@ impl Follower {
     }
 
     #[must_use]
-    pub fn receive_vote_request(
+    fn receive_vote_request(
         &mut self,
         from: Node,
         term: Term,
@@ -76,6 +76,33 @@ impl Follower {
         }
     }
 
+    #[must_use]
+    pub fn try_upgrade_term_and_receive_vote_request(
+        self,
+        from: Node,
+        term: Term,
+        disqualified: bool,
+    ) -> (TryUpgradeTermAndReceiveVoteRequestRes, bool) {
+        let (mut this, term_upgraded) = match self.try_upgrade_term(term) {
+            TryUpgradeTermRes::Upgraded(follower) => (follower, true),
+            TryUpgradeTermRes::NotUpgraded(follower) => (follower, false),
+        };
+
+        // SAFETY: term is up-to-date at this point
+        let vote_granted = this.receive_vote_request(from, term, disqualified).unwrap();
+
+        match term_upgraded {
+            true => (
+                TryUpgradeTermAndReceiveVoteRequestRes::TermUpgraded(this),
+                vote_granted,
+            ),
+            false => (
+                TryUpgradeTermAndReceiveVoteRequestRes::NotUpgraded(this),
+                vote_granted,
+            ),
+        }
+    }
+
     pub fn term(&self) -> Term {
         self.term
     }
@@ -93,4 +120,9 @@ pub enum TryUpgradeTermRes {
 #[derive(Debug)]
 pub enum ReceiveVoteRequestError {
     UpgradeTerm,
+}
+
+pub enum TryUpgradeTermAndReceiveVoteRequestRes {
+    TermUpgraded(Follower),
+    NotUpgraded(Follower),
 }

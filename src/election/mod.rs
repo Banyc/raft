@@ -78,39 +78,34 @@ mod tests {
 
         // s2 responds s1 with a vote rejection
 
-        let mut s1 = match s1.receive_vote(Node(2), s2.term(), false).unwrap() {
-            candidate::ReceiveVoteRes::Upgraded(_) => panic!(),
-            candidate::ReceiveVoteRes::NotUpgraded(v) => v,
+        let s1 = match s1.try_upgrade_term_and_receive_vote(Node(2), s2.term(), false) {
+            candidate::TryUpgradeTermAndReceiveVoteRes::TermUpgraded(_) => panic!(),
+            candidate::TryUpgradeTermAndReceiveVoteRes::Elected(_) => panic!(),
+            candidate::TryUpgradeTermAndReceiveVoteRes::NotElected(v) => v,
         };
 
         // s3 receives the vote request from s1
 
-        let mut s3 = match s3.try_upgrade_term(request_vote.term) {
-            follower::TryUpgradeTermRes::Upgraded(v) => v,
-            follower::TryUpgradeTermRes::NotUpgraded(_) => panic!(),
+        let (res, vote_granted) = s3.try_upgrade_term_and_receive_vote_request(
+            request_vote.from,
+            request_vote.term,
+            false,
+        );
+
+        let s3 = match res {
+            follower::TryUpgradeTermAndReceiveVoteRequestRes::TermUpgraded(v) => v,
+            follower::TryUpgradeTermAndReceiveVoteRequestRes::NotUpgraded(_) => panic!(),
         };
-
-        assert_eq!(s3.term(), 1);
-
-        let vote_granted = s3
-            .receive_vote_request(request_vote.from, request_vote.term, false)
-            .unwrap();
 
         assert!(vote_granted);
 
         // s3 responds s1 with a vote acceptance
 
-        s1 = match s1.try_upgrade_term(s3.term()) {
-            candidate::TryUpgradeTermRes::Upgraded(_) => panic!(),
-            candidate::TryUpgradeTermRes::NotUpgraded(v) => v,
-        };
-
-        let s1 = match s1
-            .receive_vote(s3.facts().id, s3.term(), vote_granted)
-            .unwrap()
+        let s1 = match s1.try_upgrade_term_and_receive_vote(s3.facts().id, s3.term(), vote_granted)
         {
-            candidate::ReceiveVoteRes::Upgraded(v) => v,
-            candidate::ReceiveVoteRes::NotUpgraded(_) => todo!(),
+            candidate::TryUpgradeTermAndReceiveVoteRes::TermUpgraded(_) => panic!(),
+            candidate::TryUpgradeTermAndReceiveVoteRes::Elected(v) => v,
+            candidate::TryUpgradeTermAndReceiveVoteRes::NotElected(_) => panic!(),
         };
 
         // s2 broadcasts a vote request
@@ -129,42 +124,39 @@ mod tests {
 
         // s1 responds s2 with a vote rejection
 
-        let s2 = match s2.try_upgrade_term(s1.term()) {
-            candidate::TryUpgradeTermRes::Upgraded(_) => panic!(),
-            candidate::TryUpgradeTermRes::NotUpgraded(v) => v,
-        };
-
-        let s2 = match s2.receive_vote(s1.facts().id, s1.term(), false).unwrap() {
-            candidate::ReceiveVoteRes::Upgraded(_) => panic!(),
-            candidate::ReceiveVoteRes::NotUpgraded(v) => v,
+        let s2 = match s2.try_upgrade_term_and_receive_vote(s1.facts().id, s1.term(), false) {
+            candidate::TryUpgradeTermAndReceiveVoteRes::TermUpgraded(_) => panic!(),
+            candidate::TryUpgradeTermAndReceiveVoteRes::Elected(_) => panic!(),
+            candidate::TryUpgradeTermAndReceiveVoteRes::NotElected(v) => v,
         };
 
         // s3 receives the vote request from s2
 
-        let mut s3 = match s3.try_upgrade_term(request_vote.term) {
+        let s3 = match s3.try_upgrade_term(request_vote.term) {
             follower::TryUpgradeTermRes::Upgraded(_) => panic!(),
             follower::TryUpgradeTermRes::NotUpgraded(v) => v,
         };
 
-        let vote_granted = s3
-            .receive_vote_request(request_vote.from, request_vote.term, false)
-            .unwrap();
+        let (res, vote_granted) = s3.try_upgrade_term_and_receive_vote_request(
+            request_vote.from,
+            request_vote.term,
+            false,
+        );
+
+        let s3 = match res {
+            follower::TryUpgradeTermAndReceiveVoteRequestRes::TermUpgraded(_) => panic!(),
+            follower::TryUpgradeTermAndReceiveVoteRequestRes::NotUpgraded(v) => v,
+        };
 
         assert!(!vote_granted);
 
         // s2 receives the vote rejection from s3
 
-        let s2 = match s2.try_upgrade_term(s3.term()) {
-            candidate::TryUpgradeTermRes::Upgraded(_) => panic!(),
-            candidate::TryUpgradeTermRes::NotUpgraded(v) => v,
-        };
-
-        let s2 = match s2
-            .receive_vote(s3.facts().id, s3.term(), vote_granted)
-            .unwrap()
+        let s2 = match s2.try_upgrade_term_and_receive_vote(s3.facts().id, s3.term(), vote_granted)
         {
-            candidate::ReceiveVoteRes::Upgraded(_) => panic!(),
-            candidate::ReceiveVoteRes::NotUpgraded(v) => v,
+            candidate::TryUpgradeTermAndReceiveVoteRes::TermUpgraded(_) => panic!(),
+            candidate::TryUpgradeTermAndReceiveVoteRes::Elected(_) => panic!(),
+            candidate::TryUpgradeTermAndReceiveVoteRes::NotElected(v) => v,
         };
 
         // s1 broadcasts a ping
@@ -175,14 +167,10 @@ mod tests {
 
         // s2 receives the ping from s1
 
-        let s2 = match s2.try_upgrade_term(ping.term) {
-            candidate::TryUpgradeTermRes::Upgraded(_) => panic!(),
-            candidate::TryUpgradeTermRes::NotUpgraded(v) => v,
-        };
-
-        let s2 = match s2.receive_ping(ping.term).unwrap() {
-            candidate::ReceivePingRes::Upgraded(v) => v,
-            candidate::ReceivePingRes::NotUpgraded(_) => panic!(),
+        let s2 = match s2.try_upgrade_term_and_receive_ping(ping.term) {
+            candidate::TryUpgradeTermAndReceivePingRes::TermUpgraded(_) => panic!(),
+            candidate::TryUpgradeTermAndReceivePingRes::LostElection(v) => v,
+            candidate::TryUpgradeTermAndReceivePingRes::NotUpgraded(_) => panic!(),
         };
 
         // s1 receives the pong from s2
