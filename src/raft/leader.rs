@@ -5,7 +5,10 @@ use crate::{
     Facts, Node, Term,
 };
 
-use super::follower::{self, Follower};
+use super::{
+    follower::{self, Follower},
+    VoteResp,
+};
 
 pub struct Leader {
     peers: Vec<Node>,
@@ -41,7 +44,7 @@ impl Leader {
         from: Node,
         term: Term,
         last_log: Option<EntryMeta>,
-    ) -> (ReceiveVoteReqRes, bool) {
+    ) -> (ReceiveVoteReqRes, VoteResp) {
         let election = match self.election.try_upgrade_term(term) {
             election::leader::TryUpgradeTermRes::Upgraded(election) => {
                 let follower = Follower::new(
@@ -51,7 +54,7 @@ impl Leader {
                     self.log_replication.into_log(),
                 );
 
-                let (res, vote_granted) = follower.receive_vote_req(from, term, last_log);
+                let (res, vote_resp) = follower.receive_vote_req(from, term, last_log);
 
                 let follower = match res {
                     // SAFETY: We know that the term is the same as the one we just upgraded to.
@@ -60,7 +63,7 @@ impl Leader {
                     follower::ReceiveVoteReqRes::NotUpgraded(v) => v,
                 };
 
-                return (ReceiveVoteReqRes::TermUpgraded(follower), vote_granted);
+                return (ReceiveVoteReqRes::TermUpgraded(follower), vote_resp);
             }
             election::leader::TryUpgradeTermRes::NotUpgraded(v) => v,
         };
@@ -71,7 +74,13 @@ impl Leader {
             log_replication: self.log_replication,
         };
 
-        (ReceiveVoteReqRes::NotUpgraded(leader), false)
+        let vote_resp = VoteResp {
+            from: leader.election.facts().id,
+            term: leader.election.term(),
+            vote_granted: false,
+        };
+
+        (ReceiveVoteReqRes::NotUpgraded(leader), vote_resp)
     }
 
     pub fn receive_append_entries_resp(

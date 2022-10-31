@@ -5,7 +5,7 @@ use crate::{
     Facts, Node, Term,
 };
 
-use super::candidate::Candidate;
+use super::{candidate::Candidate, VoteResp};
 
 pub struct Follower {
     peers: Vec<Node>,
@@ -25,6 +25,29 @@ impl Follower {
 
     #[must_use]
     pub fn receive_vote_req(
+        self,
+        from: Node,
+        term: Term,
+        last_log: Option<EntryMeta>,
+    ) -> (ReceiveVoteReqRes, VoteResp) {
+        let (res, vote_granted) = self.receive_vote_req_(from, term, last_log);
+
+        let follower = match &res {
+            ReceiveVoteReqRes::TermUpgraded(v) => v,
+            ReceiveVoteReqRes::NotUpgraded(v) => v,
+        };
+
+        let resp = VoteResp {
+            from: follower.election.facts().id,
+            term: follower.election.term(),
+            vote_granted,
+        };
+
+        (res, resp)
+    }
+
+    #[must_use]
+    fn receive_vote_req_(
         self,
         from: Node,
         term: Term,
