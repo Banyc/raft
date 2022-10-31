@@ -31,11 +31,15 @@ impl Leader {
         })
     }
 
-    pub fn emit(
-        &self,
-        to: Node,
-    ) -> Result<log_replication::leader::AppendEntriesReq, log_replication::leader::EmitError> {
-        self.log_replication.emit(to)
+    pub fn emit(&self, to: Node) -> Result<AppendEntriesReq, log_replication::leader::EmitError> {
+        let req = self.log_replication.emit(to)?;
+
+        Ok(AppendEntriesReq {
+            term: self.election.term(),
+            new_entries: req.new_entries,
+            prev_entry: req.prev_entry,
+            commit_index: req.commit_index,
+        })
     }
 
     #[must_use]
@@ -90,6 +94,13 @@ impl Leader {
     ) -> Result<(), log_replication::leader::ReceiveAppendEntriesRespError> {
         self.log_replication.receive_append_entries_resp(from, res)
     }
+}
+
+pub struct AppendEntriesReq {
+    pub term: Term,
+    pub new_entries: Vec<Term>,
+    pub prev_entry: Option<EntryMeta>,
+    pub commit_index: Option<usize>,
 }
 
 pub enum ReceiveVoteReqRes {
