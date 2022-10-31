@@ -27,8 +27,22 @@ impl Candidate {
     }
 
     #[must_use]
-    pub fn emit(&self) -> election::candidate::RequestVote {
-        self.election.emit()
+    pub fn emit(&self) -> VoteReq {
+        let election_emit = self.election.emit();
+
+        let last_log = self.log_replication.log().last_entry();
+
+        let (last_log_index, last_log_term) = match last_log {
+            Some((index, term, _)) => (Some(index), Some(term)),
+            None => (None, None),
+        };
+
+        VoteReq {
+            term: election_emit.term,
+            from: election_emit.from,
+            last_log_index,
+            last_log_term,
+        }
     }
 
     #[must_use]
@@ -172,6 +186,13 @@ impl Candidate {
             success,
         )
     }
+}
+
+pub struct VoteReq {
+    pub from: Node,
+    pub term: Term,
+    pub last_log_index: Option<usize>,
+    pub last_log_term: Option<Term>,
 }
 
 pub enum ReceiveVoteReqRes {
