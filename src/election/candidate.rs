@@ -114,7 +114,7 @@ impl Candidate {
         match this.receive_vote(from, term, vote_granted).unwrap() {
             ReceiveVoteRes::Upgraded(leader) => TryUpgradeTermAndReceiveVoteRes::Elected(leader),
             ReceiveVoteRes::NotUpgraded(candidate) => {
-                TryUpgradeTermAndReceiveVoteRes::NotElected(candidate)
+                TryUpgradeTermAndReceiveVoteRes::NotElectedYet(candidate)
             }
         }
     }
@@ -149,7 +149,10 @@ impl Candidate {
 }
 
 pub enum TryUpgradeTermRes {
+    /// - If receiving vote request, the follower should reset its election timer.
     Upgraded(Follower),
+
+    /// - If receiving vote request, the candidate should not reset its election timer.
     NotUpgraded(Candidate),
 }
 
@@ -179,13 +182,23 @@ pub enum ReceivePingRes {
 }
 
 pub enum TryUpgradeTermAndReceiveVoteRes {
+    /// - The follower should reset its election timer
     TermUpgraded(Follower),
+
+    /// - The leader should cancel its election timer
     Elected(Leader),
-    NotElected(Candidate),
+
+    /// - The candidate should not reset its election timer
+    NotElectedYet(Candidate),
 }
 
 pub enum TryUpgradeTermAndReceivePingRes {
+    /// - The follower should reset its election timer
     TermUpgraded(Follower),
+
+    /// - The follower should reset its election timer
     LostElection(Follower),
+
+    /// - The candidate should not reset its election timer
     NotUpgraded(Candidate),
 }

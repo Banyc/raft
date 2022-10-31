@@ -58,9 +58,17 @@ mod tests {
             0,
         );
 
+        // s1 election timer expires
+
         let s1 = s1.start_election();
 
+        // s1 resets its election timer
+
+        // s2 election timer expires
+
         let s2 = s2.start_election();
+
+        // s2 resets its election timer
 
         // s1 broadcasts a vote request
 
@@ -73,7 +81,7 @@ mod tests {
 
         let s2 = match s2.try_upgrade_term(request_vote.term) {
             candidate::TryUpgradeTermRes::Upgraded(_) => panic!(),
-            candidate::TryUpgradeTermRes::NotUpgraded(v) => v,
+            candidate::TryUpgradeTermRes::NotUpgraded(v) => v, // s2 does not reset its election timer
         };
 
         // s2 responds s1 with a vote rejection
@@ -81,7 +89,7 @@ mod tests {
         let s1 = match s1.try_upgrade_term_and_receive_vote(Node(2), s2.term(), false) {
             candidate::TryUpgradeTermAndReceiveVoteRes::TermUpgraded(_) => panic!(),
             candidate::TryUpgradeTermAndReceiveVoteRes::Elected(_) => panic!(),
-            candidate::TryUpgradeTermAndReceiveVoteRes::NotElected(v) => v,
+            candidate::TryUpgradeTermAndReceiveVoteRes::NotElectedYet(v) => v, // s1 does not reset its election timer
         };
 
         // s3 receives the vote request from s1
@@ -93,7 +101,7 @@ mod tests {
         );
 
         let s3 = match res {
-            follower::TryUpgradeTermAndReceiveVoteRequestRes::TermUpgraded(v) => v,
+            follower::TryUpgradeTermAndReceiveVoteRequestRes::TermUpgraded(v) => v, // s3 resets its election timer
             follower::TryUpgradeTermAndReceiveVoteRequestRes::NotUpgraded(_) => panic!(),
         };
 
@@ -104,8 +112,8 @@ mod tests {
         let s1 = match s1.try_upgrade_term_and_receive_vote(s3.facts().id, s3.term(), vote_granted)
         {
             candidate::TryUpgradeTermAndReceiveVoteRes::TermUpgraded(_) => panic!(),
-            candidate::TryUpgradeTermAndReceiveVoteRes::Elected(v) => v,
-            candidate::TryUpgradeTermAndReceiveVoteRes::NotElected(_) => panic!(),
+            candidate::TryUpgradeTermAndReceiveVoteRes::Elected(v) => v, // s1 cancels its election timer
+            candidate::TryUpgradeTermAndReceiveVoteRes::NotElectedYet(_) => panic!(),
         };
 
         // s2 broadcasts a vote request
@@ -127,15 +135,10 @@ mod tests {
         let s2 = match s2.try_upgrade_term_and_receive_vote(s1.facts().id, s1.term(), false) {
             candidate::TryUpgradeTermAndReceiveVoteRes::TermUpgraded(_) => panic!(),
             candidate::TryUpgradeTermAndReceiveVoteRes::Elected(_) => panic!(),
-            candidate::TryUpgradeTermAndReceiveVoteRes::NotElected(v) => v,
+            candidate::TryUpgradeTermAndReceiveVoteRes::NotElectedYet(v) => v, // s2 does not reset its election timer
         };
 
         // s3 receives the vote request from s2
-
-        let s3 = match s3.try_upgrade_term(request_vote.term) {
-            follower::TryUpgradeTermRes::Upgraded(_) => panic!(),
-            follower::TryUpgradeTermRes::NotUpgraded(v) => v,
-        };
 
         let (res, vote_granted) = s3.try_upgrade_term_and_receive_vote_request(
             request_vote.from,
@@ -145,7 +148,7 @@ mod tests {
 
         let s3 = match res {
             follower::TryUpgradeTermAndReceiveVoteRequestRes::TermUpgraded(_) => panic!(),
-            follower::TryUpgradeTermAndReceiveVoteRequestRes::NotUpgraded(v) => v,
+            follower::TryUpgradeTermAndReceiveVoteRequestRes::NotUpgraded(v) => v, // s3 does not reset its election timer
         };
 
         assert!(!vote_granted);
@@ -156,7 +159,7 @@ mod tests {
         {
             candidate::TryUpgradeTermAndReceiveVoteRes::TermUpgraded(_) => panic!(),
             candidate::TryUpgradeTermAndReceiveVoteRes::Elected(_) => panic!(),
-            candidate::TryUpgradeTermAndReceiveVoteRes::NotElected(v) => v,
+            candidate::TryUpgradeTermAndReceiveVoteRes::NotElectedYet(v) => v, // s2 does not reset its election timer
         };
 
         // s1 broadcasts a ping
@@ -169,7 +172,7 @@ mod tests {
 
         let s2 = match s2.try_upgrade_term_and_receive_ping(ping.term) {
             candidate::TryUpgradeTermAndReceivePingRes::TermUpgraded(_) => panic!(),
-            candidate::TryUpgradeTermAndReceivePingRes::LostElection(v) => v,
+            candidate::TryUpgradeTermAndReceivePingRes::LostElection(v) => v, // s2 resets its election timer
             candidate::TryUpgradeTermAndReceivePingRes::NotUpgraded(_) => panic!(),
         };
 
@@ -184,7 +187,8 @@ mod tests {
 
         let s3 = match s3.try_upgrade_term(ping.term) {
             follower::TryUpgradeTermRes::Upgraded(_) => panic!(),
-            follower::TryUpgradeTermRes::NotUpgraded(v) => v,
+            follower::TryUpgradeTermRes::SameTermNotUpgraded(v) => v, // s3 resets its election timer
+            follower::TryUpgradeTermRes::StaleTermNotUpgraded(_) => panic!(),
         };
 
         // s1 receives the pong from s3

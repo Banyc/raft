@@ -27,8 +27,10 @@ impl Follower {
             let follower = Follower::new(self.facts, term);
 
             TryUpgradeTermRes::Upgraded(follower)
+        } else if term < self.term {
+            TryUpgradeTermRes::StaleTermNotUpgraded(self)
         } else {
-            TryUpgradeTermRes::NotUpgraded(self)
+            TryUpgradeTermRes::SameTermNotUpgraded(self)
         }
     }
 
@@ -85,7 +87,8 @@ impl Follower {
     ) -> (TryUpgradeTermAndReceiveVoteRequestRes, bool) {
         let (mut this, term_upgraded) = match self.try_upgrade_term(term) {
             TryUpgradeTermRes::Upgraded(follower) => (follower, true),
-            TryUpgradeTermRes::NotUpgraded(follower) => (follower, false),
+            TryUpgradeTermRes::SameTermNotUpgraded(follower) => (follower, false),
+            TryUpgradeTermRes::StaleTermNotUpgraded(follower) => (follower, false),
         };
 
         // SAFETY: term is up-to-date at this point
@@ -113,8 +116,14 @@ impl Follower {
 }
 
 pub enum TryUpgradeTermRes {
+    /// - If receiving ping, the follower should reset its election timer
     Upgraded(Follower),
-    NotUpgraded(Follower),
+
+    /// - If receiving ping, the follower should reset its election timer
+    SameTermNotUpgraded(Follower),
+
+    /// - If receiving ping, the follower should not reset its election timer
+    StaleTermNotUpgraded(Follower),
 }
 
 #[derive(Debug)]
@@ -123,6 +132,9 @@ pub enum ReceiveVoteRequestError {
 }
 
 pub enum TryUpgradeTermAndReceiveVoteRequestRes {
+    /// - The follower should reset its election timer
     TermUpgraded(Follower),
+
+    /// - The follower should not reset its election timer
     NotUpgraded(Follower),
 }
