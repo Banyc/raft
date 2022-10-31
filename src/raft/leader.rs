@@ -36,9 +36,7 @@ impl Leader {
 
         Ok(AppendEntriesReq {
             term: self.election.term(),
-            new_entries: req.new_entries,
-            prev_entry: req.prev_entry,
-            commit_index: req.commit_index,
+            req,
         })
     }
 
@@ -128,9 +126,7 @@ impl Leader {
 
 pub struct AppendEntriesReq {
     pub term: Term,
-    pub new_entries: Vec<Term>,
-    pub prev_entry: Option<EntryMeta>,
-    pub commit_index: Option<usize>,
+    pub req: log_replication::leader::AppendEntriesReq,
 }
 
 pub enum ReceiveVoteReqRes {
