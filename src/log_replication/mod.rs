@@ -54,7 +54,7 @@ mod tests {
         let mut s1 = Leader::new(1, Log::new(), &[Node(2)]).unwrap();
         let mut s2 = Follower::new(Log::new());
 
-        let idx = s1.log_push(1);
+        let idx = s1.log_push();
 
         assert_eq!(idx, 0);
 

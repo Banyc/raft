@@ -162,8 +162,8 @@ impl Leader {
         &self.log
     }
 
-    pub fn log_push(&mut self, entry: Term) -> usize {
-        self.log.push(entry)
+    pub fn log_push(&mut self) -> usize {
+        self.log.push(self.term)
     }
 }
 

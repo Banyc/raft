@@ -120,7 +120,7 @@ impl Leader {
     }
 
     pub fn push(&mut self) -> usize {
-        self.log_replication.log_push(self.election.term())
+        self.log_replication.log_push()
     }
 }
 
